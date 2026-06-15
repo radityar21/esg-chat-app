@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESG Report Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+            color: white;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        }
+        .header-icon { font-size: 22px; }
+        .header h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
+        .header .subtitle { font-size: 11px; opacity: 0.7; font-weight: 400; margin-top: 2px; }
+
+        /* Welcome Screen (centered, before first message) */
+        .welcome-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 24px;
+            text-align: center;
+            transition: opacity 0.3s ease;
+        }
+        .welcome-screen.hidden { display: none; }
+        .welcome-icon { font-size: 48px; margin-bottom: 16px; }
+        .welcome-title { font-size: 22px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
+        .welcome-subtitle { font-size: 14px; color: #64748b; max-width: 400px; line-height: 1.6; }
+        .welcome-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; justify-content: center; }
+        .welcome-chip {
+            background: white;
+            border: 1px solid #e2e8f0;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .welcome-chip:hover { border-color: #3b82f6; color: #3b82f6; background: #f0f7ff; }
+
+        /* Chat Container */
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .chat-container.active { display: flex; }
+
+        /* Messages */
+        .message {
+            max-width: 72%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            line-height: 1.6;
+            word-wrap: break-word;
+            animation: fadeIn 0.2s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+        .message.user {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .message.agent {
+            background: white;
+            color: #334155;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            border: 1px solid #f1f5f9;
+        }
+        .message.agent a { color: #2563eb; text-decoration: none; font-weight: 500; }
+        .message.agent a:hover { text-decoration: underline; }
+        .message.agent strong { font-weight: 600; color: #1e293b; }
+
+        .message.system-notification {
+            background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+            border: 1px solid #a7f3d0;
+            color: #065f46;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .message.system-error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+            align-self: flex-start;
+        }
+        .message.system-warning {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            color: #92400e;
+            align-self: flex-start;
+        }
+
+        .typing {
+            align-self: flex-start;
+            color: #94a3b8;
+            font-size: 12px;
+            padding: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .typing-dots span {
+            width: 6px; height: 6px; background: #94a3b8; border-radius: 50%;
+            display: inline-block; animation: bounce 1.2s infinite;
+        }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }
+
+        /* Input Area */
+        .input-area {
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            padding: 14px 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .input-area input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 24px;
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .input-area input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .input-area button {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            border: none;
+            width: 38px; height: 38px;
+            border-radius: 50%;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.1s;
+        }
+        .input-area button:hover { transform: scale(1.05); }
+        .input-area button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+        /* Polling Indicator */
+        .polling-indicator {
+            background: linear-gradient(135deg, #eff6ff, #dbeafe);
+            border-top: 1px solid #bfdbfe;
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #1d4ed8;
+        }
+        .polling-indicator.hidden { display: none; }
+        .polling-dot { width: 7px; height: 7px; background: #3b82f6; border-radius: 50%; animation: pulse 1.5s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+
+        /* Download Button */
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #059669, #047857);
+            color: white;
+            padding: 7px 14px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 12px;
+            margin-top: 6px;
+            transition: transform 0.1s;
+        }
+        .download-btn:hover { transform: scale(1.02); color: white; }
+        .download-expiry { font-size: 10px; color: #6b7280; margin-top: 3px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span class="header-icon">🌿</span>
+        <div>
+            <h1>ESG Report Generator</h1>
+            <div class="subtitle">AI-Powered Sustainability Reporting</div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;">
+            <button onclick="showView('dashboard')" id="btnDash" style="padding:6px 14px;border-radius:16px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.15);color:white;cursor:pointer;font-size:12px;">📊 Dashboard</button>
+            <button onclick="showView('chat')" id="btnChat" style="padding:6px 14px;border-radius:16px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.15);color:white;cursor:pointer;font-size:12px;">💬 Chat</button>
+        </div>
+    </div>
+
+    <!-- Dashboard View -->
+    <div id="dashboardView" style="display:none;padding:16px 20px;max-height:calc(100vh - 160px);overflow-y:auto;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;" id="statsCards">
+            <div style="background:#1B3A6B;color:white;padding:16px;border-radius:12px;text-align:center;">
+                <div style="font-size:24px;font-weight:bold;" id="statTotal">—</div>
+                <div style="font-size:11px;opacity:0.8;">Reports Generated</div>
+            </div>
+            <div style="background:#2E7D32;color:white;padding:16px;border-radius:12px;text-align:center;">
+                <div style="font-size:24px;font-weight:bold;" id="statSuccess">—</div>
+                <div style="font-size:11px;opacity:0.8;">Succeeded</div>
+            </div>
+            <div style="background:#E65100;color:white;padding:16px;border-radius:12px;text-align:center;">
+                <div style="font-size:24px;font-weight:bold;" id="statFailed">—</div>
+                <div style="font-size:11px;opacity:0.8;">Failed</div>
+            </div>
+            <div style="background:#4A148C;color:white;padding:16px;border-radius:12px;text-align:center;">
+                <div style="font-size:24px;font-weight:bold;" id="statRunning">—</div>
+                <div style="font-size:11px;opacity:0.8;">In Progress</div>
+            </div>
+        </div>
+        <h3 style="margin:0 0 10px;color:#1B3A6B;font-size:14px;">📋 Recent Reports</h3>
+        <div id="historyTable" style="font-size:12px;">Loading...</div>
+        <h3 style="margin:16px 0 10px;color:#1B3A6B;font-size:14px;">📚 Reference Library</h3>
+        <div id="docsPanel" style="font-size:12px;">Loading...</div>
+    </div>
+
+    <!-- Welcome Screen (centered, disappears on first message) -->
+    <div class="welcome-screen" id="welcomeScreen">
+        <div class="welcome-icon">📊</div>
+        <div class="welcome-title">ESG Report Assistant</div>
+        <div class="welcome-subtitle">Generate comprehensive sustainability reports compliant with GRI, IFRS S2, CSRD/ESRS, and OJK frameworks.</div>
+        <div class="welcome-chips">
+            <div class="welcome-chip" onclick="quickSend('I want to generate a report')">📄 Generate report</div>
+            <div class="welcome-chip" onclick="quickSend('What frameworks are supported?')">📋 Frameworks</div>
+            <div class="welcome-chip" onclick="quickSend('Check status')">🔍 Check status</div>
+        </div>
+    </div>
+
+    <!-- Chat Messages -->
+    <div class="chat-container" id="chat"></div>
+
+    <div class="polling-indicator hidden" id="pollingIndicator">
+        <div class="polling-dot"></div>
+        <span id="pollingText">Generating report...</span>
+    </div>
+
+    <div class="input-area">
+        <input type="text" id="input" placeholder="Ask me anything about ESG reporting..." autocomplete="off">
+        <button id="send" onclick="sendMessage()">➤</button>
+    </div>
+
+    <script>
+        const API_URL = "https://olj4tuggm1.execute-api.us-east-1.amazonaws.com/prod";
+        const POLL_INTERVAL_MS = 30000;
+        const MAX_POLL_ATTEMPTS = 45;
+
+        let sessionId = crypto.randomUUID();
+        const chat = document.getElementById("chat");
+        const input = document.getElementById("input");
+        const sendBtn = document.getElementById("send");
+        const welcomeScreen = document.getElementById("welcomeScreen");
+        const pollingIndicator = document.getElementById("pollingIndicator");
+        const pollingText = document.getElementById("pollingText");
+
+        let pollingActive = false;
+        let pollCount = 0;
+        let pollTimerId = null;
+        let currentExecutionId = null;
+        let generationStartTime = null;
+
+        input.addEventListener("keypress", (e) => {
+            if (e.key === "Enter" && !sendBtn.disabled) sendMessage();
+        });
+
+        function quickSend(text) {
+            showView('chat');
+            input.value = text;
+            sendMessage();
+        }
+
+        // === DASHBOARD FUNCTIONS ===
+        function showView(view) {
+            const dashboard = document.getElementById('dashboardView');
+            const chatContainer = document.getElementById('chat');
+            const welcome = document.getElementById('welcomeScreen');
+            if (view === 'dashboard') {
+                dashboard.style.display = 'block';
+                chatContainer.style.display = 'none';
+                welcome.style.display = 'none';
+                document.getElementById('btnDash').style.background = 'rgba(255,255,255,0.3)';
+                document.getElementById('btnChat').style.background = 'rgba(255,255,255,0.15)';
+                loadDashboard();
+            } else {
+                dashboard.style.display = 'none';
+                chatContainer.style.display = 'flex';
+                document.getElementById('btnChat').style.background = 'rgba(255,255,255,0.3)';
+                document.getElementById('btnDash').style.background = 'rgba(255,255,255,0.15)';
+            }
+        }
+
+        async function loadDashboard() {
+            try {
+                const resp = await fetch(`${API_URL}/history`);
+                const data = await resp.json();
+                document.getElementById('statTotal').textContent = data.total_succeeded + data.total_failed;
+                document.getElementById('statSuccess').textContent = data.total_succeeded;
+                document.getElementById('statFailed').textContent = data.total_failed;
+                document.getElementById('statRunning').textContent = data.total_running;
+
+                let html = '<table style="width:100%;border-collapse:collapse;">';
+                html += '<tr style="background:#1B3A6B;color:white;"><th style="padding:6px 8px;text-align:left;">Date</th><th>Framework</th><th>Year</th><th>Duration</th><th>Status</th><th>Download</th></tr>';
+                (data.executions || []).forEach(ex => {
+                    const date = ex.start_time ? new Date(ex.start_time).toLocaleDateString() : '—';
+                    const dur = ex.duration_seconds ? `${Math.floor(ex.duration_seconds/60)}m` : '—';
+                    const statusColor = ex.status === 'SUCCEEDED' ? '#2E7D32' : ex.status === 'FAILED' ? '#C62828' : '#FF8F00';
+                    let dlBtns = '';
+                    if (ex.download_url) dlBtns += `<a href="${ex.download_url}" target="_blank" style="color:#1B3A6B;font-weight:bold;text-decoration:none;">📄</a> `;
+                    if (ex.download_url_pptx) dlBtns += `<a href="${ex.download_url_pptx}" target="_blank" style="color:#FF8F00;font-weight:bold;text-decoration:none;">📊</a>`;
+                    if (!dlBtns) dlBtns = '—';
+                    html += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px 8px;">${date}</td><td>${ex.framework||'—'}</td><td>${ex.reporting_year||'—'}</td><td>${dur}</td><td style="color:${statusColor};font-weight:bold;">${ex.status}</td><td>${dlBtns}</td></tr>`;
+                });
+                html += '</table>';
+                document.getElementById('historyTable').innerHTML = html;
+            } catch(e) {
+                document.getElementById('historyTable').innerHTML = '<em>Failed to load history</em>';
+            }
+
+            // Load documents
+            try {
+                const resp2 = await fetch(`${API_URL}/history?type=documents`);
+                const docs = await resp2.json();
+                let dhtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+                const cats = {};
+                (docs.documents || []).forEach(d => {
+                    if (!cats[d.category]) cats[d.category] = [];
+                    cats[d.category].push(d);
+                });
+                Object.entries(cats).forEach(([cat, files]) => {
+                    dhtml += `<div style="background:#F2F6FA;border-radius:8px;padding:10px;min-width:140px;"><b style="color:#1B3A6B;font-size:11px;">${cat.toUpperCase()}</b><div style="font-size:10px;color:#666;">${files.length} docs</div></div>`;
+                });
+                dhtml += '</div>';
+                document.getElementById('docsPanel').innerHTML = dhtml;
+            } catch(e) {
+                document.getElementById('docsPanel').innerHTML = '<em>Failed to load documents</em>';
+            }
+        }
+        }
+
+        async function sendMessage() {
+            const msg = input.value.trim();
+            if (!msg) return;
+
+            // Switch from welcome to chat mode
+            welcomeScreen.classList.add("hidden");
+            chat.classList.add("active");
+
+            addMessage("user", msg);
+            input.value = "";
+            sendBtn.disabled = true;
+
+            const typingEl = document.createElement("div");
+            typingEl.className = "typing";
+            typingEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div> Thinking...';
+            chat.appendChild(typingEl);
+            chat.scrollTop = chat.scrollHeight;
+
+            try {
+                const response = await callAgent(msg);
+                typingEl.remove();
+
+                if (response.error) {
+                    addMessage("system-error", "Error: " + response.error);
+                } else {
+                    const agentText = response.response || "No response";
+                    displayAgentResponse(agentText);
+                    checkForExecutionStart(agentText);
+                }
+            } catch (err) {
+                typingEl.remove();
+                addMessage("system-error", "Connection error: " + err.message);
+            }
+
+            sendBtn.disabled = false;
+            input.focus();
+        }
+
+        async function callAgent(message) {
+            const res = await fetch(API_URL + "/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: message, session_id: sessionId }),
+            });
+            return await res.json();
+        }
+
+        function displayAgentResponse(text) {
+            const html = parseMarkdown(text);
+            addMessage("agent", html, true);
+        }
+
+        function parseMarkdown(text) {
+            return text
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/`(.+?)`/g, '<code style="background:#f1f5f9;padding:1px 4px;border-radius:3px;font-size:11px;">$1</code>')
+                .replace(/\n/g, '<br>')
+                .replace(/(https?:\/\/[^\s<>")\]]+)/g, '<a href="$1" target="_blank" rel="noopener">🔗 Link</a>');
+        }
+
+        function addMessage(type, text, isHtml = false) {
+            const div = document.createElement("div");
+            div.className = "message " + type;
+            if (isHtml) { div.innerHTML = text; } else { div.textContent = text; }
+            chat.appendChild(div);
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        // ===== POLLING =====
+
+        function checkForExecutionStart(responseText) {
+            const execMatch = responseText.match(/Execution ID:\s*`?([a-f0-9\-]+)`?/i)
+                || responseText.match(/execution[_\s]?id[:\s]+`?([a-f0-9\-]+)`?/i);
+            if (execMatch && !pollingActive) {
+                currentExecutionId = execMatch[1];
+                generationStartTime = Date.now();
+                startPolling();
+            }
+        }
+
+        function startPolling() {
+            pollingActive = true;
+            pollCount = 0;
+            pollingIndicator.classList.remove("hidden");
+            pollTimerId = setInterval(pollStatus, POLL_INTERVAL_MS);
+        }
+
+        function stopPolling() {
+            pollingActive = false;
+            if (pollTimerId) { clearInterval(pollTimerId); pollTimerId = null; }
+            currentExecutionId = null;
+            pollingIndicator.classList.add("hidden");
+        }
+
+        async function pollStatus() {
+            pollCount++;
+            if (pollCount > MAX_POLL_ATTEMPTS) {
+                stopPolling();
+                addMessage("system-warning", "⚠️ Report generation is taking longer than expected. Ask \"check status\" to get an update.");
+                return;
+            }
+            const elapsed = Math.round((Date.now() - generationStartTime) / 1000);
+            const m = Math.floor(elapsed / 60), s = elapsed % 60;
+            pollingText.textContent = `Generating report... ${m}m ${s}s`;
+
+            try {
+                const res = await fetch(API_URL + "/status?execution_id=" + encodeURIComponent(currentExecutionId));
+                const data = await res.json();
+                if (data.status === "SUCCEEDED") { await handleComplete(data); }
+                else if (data.status === "FAILED") { handleFailed(data); }
+            } catch (err) { /* retry next interval */ }
+        }
+
+        async function handleComplete(data) {
+            stopPolling();
+            const sec = data.elapsed_seconds || Math.round((Date.now() - generationStartTime) / 1000);
+            const m = Math.floor(sec / 60), s = sec % 60;
+            let dl = "";
+            if (data.download_url) {
+                dl = `<a class="download-btn" href="${data.download_url}" target="_blank" rel="noopener">📄 Download Report (DOCX)</a>`;
+                if (data.download_url_pptx) {
+                    dl += `<br><a class="download-btn" href="${data.download_url_pptx}" target="_blank" rel="noopener" style="background:linear-gradient(135deg,#FF8F00,#F57C00);margin-top:6px;">📊 Download Dashboard (PPTX)</a>`;
+                }
+                dl += `<div class="download-expiry">Expires in 1 hour · ${data.sections_assembled || "?"} sections · ${data.file_size_kb || "?"} KB</div>`;
+            } else {
+                dl = '<em>Ask "download report" for the link.</em>';
+            }
+            addMessage("system-notification", `✅ <strong>Report ready!</strong><br>⏱️ ${m}m ${s}s<br>${dl}`, true);
+        }
+
+        function handleFailed(data) {
+            stopPolling();
+            addMessage("system-error", `❌ Generation failed: ${data.cause || data.error || "Unknown"}`);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-03
+# FRAMEWORK: OJK_PSPK
+# TOKEN_COUNT: ~400
+# COMPATIBLE_MODEL: anthropic.claude-*
+
+## FRAMEWORK: OJK POJK 51/2017 — Penerapan Keuangan Berkelanjutan (PSPK)
+
+You are generating disclosures for the Indonesian banking regulator (OJK). Default language: English with Indonesian regulation names in parenthetical.
+
+### REQUIRED DISCLOSURE CATEGORIES
+
+**Governance (POJK 51 Art. 4-7):** Sustainability committee; board competence; oversight frequency (minimum quarterly); integration with risk committee.
+
+**Strategy (POJK 51 Art. 8-12):** RAKB (Rencana Aksi Keuangan Berkelanjutan); green asset ratio; sustainable portfolio %; alignment with Indonesia NDC (Net Zero 2060).
+
+**Risk Management (POJK 51 Art. 13-16):** Climate stress testing; physical/transition risk in ICAAP; sector concentration for high-carbon; KBMI classification context.
+
+**Environmental Metrics (SE OJK Circular):** Scope 1/2/3 (tCO2e); energy intensity; financed emissions (PCAF); green portfolio %; renewable energy usage.
+
+**Social Metrics (SE OJK Circular):** Financial inclusion; MSME lending ratio; diversity; community investment; customer complaint resolution.
+
+**Governance Metrics (SE OJK Circular):** Anti-corruption training; ethics violations; ESG-linked remuneration; whistleblower cases.
+
+### OJK TABLE FORMAT (MANDATORY)
+| No. | Indicator | Unit | Current Year | Prior Year | Change (%) | Target | Achievement |
+
+### INDONESIA-SPECIFIC CONTEXT (MUST INJECT)
+- KBMI Classification: "KBMI 3" (determines reporting scope)
+- NDC: "Indonesia Enhanced NDC: 31.89% unconditional, 43.2% conditional by 2030"
+- Net Zero: "Indonesia Long-Term Strategy: Net Zero by 2060 or sooner"
+- Grid Factor: "PLN National Grid 2023: 0.7886 kg CO2/kWh"
+- Regulation: "POJK No. 51/POJK.03/2017 tentang Penerapan Keuangan Berkelanjutan bagi Lembaga Jasa Keuangan, Emiten, dan Perusahaan Publik"
+- Effective: "Mandatory for KBMI 3-4 banks from January 2027 (PSPK)"
+
+### BAHASA INDONESIA TOGGLE
+IF language = "id": Generate in Bahasa Indonesia (formal/baku). Keep technical terms in English: tCO2e, PCAF, GHG Protocol, Scope 1/2/3.
+ELSE (default): English with Indonesian regulation names in Bahasa (parenthetical).
+
+### OJK STYLE RULES
+- Numbering: Use "No." column in all tables (sequential integer)
+- Currency: IDR with dot separator — "IDR 1.500.000.000.000"
+- Percentage: 2 decimal places with "%" suffix
+- Year reference: "Reporting Year 2024" (English) / "Tahun Pelaporan 2024" (Bahasa)
+- First regulation citation: Full — "POJK No. 51/POJK.03/2017 tentang Penerapan Keuangan Berkelanjutan..."
+- Subsequent citations: Short — "POJK 51/2017"
+
+### PARAGRAPH COUNT
+- Environmental Metrics: 3–4 paragraphs + OJK table
+- Social Metrics: 2–3 paragraphs + OJK table
+- Governance Metrics: 2–3 paragraphs + OJK table
+- Scope 1: 3–4 paragraphs + OJK format table
+- PCAF: 4–6 paragraphs + OJK format table + green portfolio context

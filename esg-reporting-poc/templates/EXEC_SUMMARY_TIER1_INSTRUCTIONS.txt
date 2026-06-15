@@ -1,0 +1,149 @@
+## EXECUTIVE SUMMARY — 2-TIER STRUCTURE (MANDATORY)
+## This file is injected ONLY for "summary" template_id.
+
+You MUST generate a 2-tier Executive Summary separated by the exact marker:
+<<<TIER_BREAK>>>
+
+The marker MUST appear on its own line as a standalone paragraph.
+
+=== TIER 1: C-LEVEL STRATEGIC BRIEF ===
+Target audience: Board of Directors, CEO, C-Suite.
+Reading time: <2 minutes. Maximum 1 page when rendered.
+Tone: Strategic, direct, action-oriented. NO technical jargon.
+
+Generate these elements IN ORDER:
+
+### 1. STRATEGIC HEADLINE (1 paragraph, paragraph_type: "narrative")
+- 3-4 sentences MAX
+- Sentence 1: Total GHG footprint headline + direction (up/down/flat)
+- Sentence 2: What drove the change (1 key driver)
+- Sentence 3: How this compares to peers (if benchmark data available)
+- Sentence 4: What the Board needs to act on
+
+### 2. KPI HIGHLIGHTS (field: "kpi_highlights")
+Generate exactly 4 headline KPIs:
+- Total GHG Emissions (Scope 1+2+3) with YoY trend
+- Revenue Intensity (tCO₂e/IDR Bn) with YoY trend
+- PCAF Data Quality Score
+- Financed Emissions Coverage (%)
+
+### 3. ESG SCORECARD TABLE
+Generate as a table with headers: ["Dimension", "Rating", "Key Driver"]
+Rows:
+- Environmental: 🟢 (emissions decreasing >3%) | 🟡 (flat ±3%) | 🔴 (increasing >3%)
+- Social: 🟢 (female% ≥40 AND training≥30hrs) | 🟡 (partial) | 🔴 (below both)
+- Governance: 🟢 (committee+policy+targets) | 🟡 (partial) | 🔴 (none)
+
+Rating MUST be derivable from actual metrics provided. NEVER subjective.
+
+### 4. EXECUTIVE CHARTS (field: "charts")
+Generate exactly 2-3 high-level charts:
+1. STACKED_BAR: "Total GHG Emissions by Scope (YoY)" — Scope 1 + 2 + 3 stacked, 2 years
+2. PIE: "Emission Source Distribution" — Scope 1 vs Scope 2 vs Scope 3 proportions
+3. BAR (optional): "Emission Intensity Trend" — 2 bars (prior/current year intensity)
+
+Charts must use SIMPLE labels (not technical):
+- "Operasional Langsung" instead of "Scope 1 Direct GHG"
+- "Listrik & Energi" instead of "Scope 2 Energy Indirect"
+- "Emisi Pembiayaan" instead of "Scope 3 Category 15 Financed"
+
+### 5. BOARD ACTIONS REQUIRED (paragraph with ⚡ marker)
+Format as a paragraph starting with "⚡ PRIORITY ACTIONS:" followed by numbered items:
+⚡ PRIORITY ACTIONS:
+1. [High] {Action} — {Rationale} ({Timeline})
+2. [High] {Action} — {Rationale} ({Timeline})
+3. [Medium] {Action} — {Rationale} ({Timeline})
+
+Derive from highest-priority actions across ALL sections.
+Maximum 3 items. Each must have: action verb + specific ask + rationale + timeline.
+
+### 6. RISK & OPPORTUNITY (1 table)
+Table with headers: ["", "Short-term (1-2 years)", "Medium-term (3-5 years)"]
+Rows: ["Risks", "Opportunities"]
+Each cell: 1-2 bullet points.
+
+### 7. OUTLOOK STATEMENT (1 paragraph, paragraph_type: "forward_looking")
+- Start with italic qualifier: "Forward-looking statement: "
+- 2-3 sentences on trajectory + dependencies
+- Must reference at least 1 peer or regulatory deadline
+- NEVER promise specific future numbers
+
+---
+
+<<<TIER_BREAK>>>
+
+(Place this marker exactly as shown above — on its own line, as a separate paragraph)
+
+---
+
+=== TIER 2: DETAILED PERFORMANCE SUMMARY ===
+Target audience: Sustainability team, Risk, Compliance, Auditors.
+Tone: Technical, comprehensive, data-rich.
+
+Generate these elements:
+
+### 1. ENVIRONMENTAL PERFORMANCE TABLE
+Table with headers: ["Metric", "FY{prior_year}", "FY{reporting_year}", "YoY Change", "Unit"]
+Include: Scope 1, Scope 2 (location + market), Scope 3 gross, Scope 3 weighted,
+         Total (market-based), Intensity (per revenue), Intensity (per FTE)
+
+### 2. SOCIAL PERFORMANCE TABLE
+Table with headers: ["Metric", "FY{prior_year}", "FY{reporting_year}", "YoY Change", "Unit"]
+Include: Total FTE, Female %, Female in Management %, Training hours/FTE,
+         Voluntary Turnover %, Discrimination cases
+
+### 3. FRAMEWORK COMPLIANCE STATUS TABLE
+Table with headers: ["Requirement", "GRI 305", "IFRS S2", "ESRS E1", "OJK PSPK"]
+Cells: "✅ Disclosed" | "⚠️ Partial" | "❌ Gap" | "N/A"
+Rows: Scope 1&2, Scope 3/Financed, Intensity, Reduction Targets, Transition Plan,
+      Governance, Risk Management, Scenario Analysis, Social Metrics
+
+### 4. DATA QUALITY SUMMARY (1 paragraph + insight_box)
+- PCAF portfolio-weighted score
+- Data completeness percentage
+- Confidence gap (gross vs weighted financed emissions difference)
+
+### 5. DETAILED NARRATIVE (2-3 paragraphs)
+- Key environmental trends + peer context
+- Key social trends
+- Governance maturity assessment + framework gaps
+
+### 6. TOP RECOMMENDATIONS (field: "top_recommendations")
+- 3-5 bullet points from highest priority actions across all sections
+- Format: "Action — expected impact — timeline — peer reference"
+
+---
+
+### OUTPUT JSON STRUCTURE:
+{
+  "section_id": "...",
+  "title": "Executive Summary",
+  "kpi_highlights": [...],  // 4 KPIs for Tier 1
+  "insight_box": null,      // NOT used in summary
+  "diagnostic": null,       // NOT used in summary
+  "priority_actions": null, // NOT used in summary (use top_recommendations instead)
+  "paragraphs": [
+    // Tier 1 paragraphs
+    {"text": "Strategic headline...", "paragraph_type": "narrative"},
+    {"text": "⚡ PRIORITY ACTIONS:\n1. [High] ...\n2. ...", "paragraph_type": "narrative"},
+    {"text": "Forward-looking statement: ...", "paragraph_type": "forward_looking"},
+    // TIER BREAK MARKER
+    {"text": "<<<TIER_BREAK>>>", "paragraph_type": "marker"},
+    // Tier 2 paragraphs
+    {"text": "Environmental performance...", "paragraph_type": "narrative"},
+    {"text": "Social performance...", "paragraph_type": "narrative"},
+    {"text": "Data quality summary...", "paragraph_type": "narrative"}
+  ],
+  "tables": [
+    {"headers": [...], "rows": [...], "caption": "ESG Scorecard", "tier": 1},
+    {"headers": [...], "rows": [...], "caption": "Risk & Opportunity Matrix", "tier": 1},
+    {"headers": [...], "rows": [...], "caption": "Environmental Performance Summary", "tier": 2},
+    {"headers": [...], "rows": [...], "caption": "Social Performance Summary", "tier": 2},
+    {"headers": [...], "rows": [...], "caption": "Framework Compliance Status", "tier": 2}
+  ],
+  "charts": [...],  // 2-3 high-level overview charts
+  "top_recommendations": [...],  // 3-5 items
+  "footnotes": [...],
+  "framework_references": [...],
+  "metadata": {...}
+}

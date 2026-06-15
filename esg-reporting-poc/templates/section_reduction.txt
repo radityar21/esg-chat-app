@@ -1,0 +1,75 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-09
+# SECTION: REDUCTION
+# TOKEN_COUNT: ~450
+
+## SECTION TEMPLATE: GHG Emissions Reduction (GRI 305-5)
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (MANDATORY — DO NOT MODIFY)
+title: "GRI 305-5: Reduction of GHG Emissions"
+
+### OBJECTIVE
+Generate a disclosure section reporting on GHG emission reductions achieved during
+the reporting period. GRI 305-5 requires disclosure of reductions as a direct result
+of initiatives, separate from changes due to acquisitions, divestments, or methodology.
+
+### DATA INPUT
+Uses same data as provided in metrics_json. Key fields:
+{
+  "scope1_tco2e": {scope1_tco2e},
+  "prior_year_scope1_tco2e": {prior_year_scope1_tco2e},
+  "yoy_scope1_change_pct": {yoy_scope1_change_pct},
+  "scope2_location_tco2e": {scope2_location_tco2e},
+  "prior_year_scope2_location": {prior_year_scope2_location},
+  "yoy_scope2_change_pct": {yoy_scope2_change_pct},
+  "base_year": {base_year},
+  "vs_base_year_change_pct": {vs_base_year_change_pct}
+}
+
+### RAG CONTEXT
+{rag_context_targets}
+
+### CONDITIONAL DISCLOSURE LOGIC
+IF yoy_change values are available (not NULL) AND base_year is available:
+  → Generate disclosure showing:
+    1. YoY changes per scope (absolute tCO2e difference + percentage)
+    2. vs Base year comparison (if reporting_year > base_year)
+    3. Distinction: what is reduction from initiatives vs organic growth/decline
+    4. Reduction initiative inventory from RAG CONTEXT peer examples
+
+IF yoy_change values are available BUT no dedicated reduction targets/initiatives in DATA INPUT:
+  → Generate PARTIAL disclosure:
+    1. Report observed changes (increase or decrease) vs prior year
+    2. Acknowledge that a structured reduction program is not yet formalized
+    3. Provide peer benchmarks from RAG CONTEXT (what reduction programs BRI, DBS, BCA have)
+    4. Recommend specific reduction initiatives based on the institution's emission profile
+
+IF ALL reduction-related data is NULL:
+  → Generate GAP ANALYSIS:
+    1. State GRI 305-5 requirements
+    2. Explain why reduction tracking is essential (regulatory + investor expectation)
+    3. Peer comparison: what other banks have achieved
+    4. Roadmap to establish reduction tracking
+
+### REQUIRED ELEMENTS (when data is available)
+1. Opening paragraph: state overall emissions change vs prior year
+2. Scope-by-scope change table:
+   | Scope | Current Year (tCO2e) | Prior Year (tCO2e) | Change (%) | Direction |
+3. Base year comparison (if available)
+4. Attribution statement: "Changes are attributed to [operational growth/efficiency improvements/...]"
+5. Reduction initiatives (from RAG CONTEXT peer examples if no own initiatives documented)
+6. Forward-looking statement on planned reductions
+
+### ADVISORY RECOMMENDATION BLOCK (MANDATORY)
+Generate 2-3 specific recommendations referencing peer banks from RAG CONTEXT:
+- **Finding**: [e.g., "No formalized reduction program; emissions increased 2.36% YoY"]
+- **Benchmark**: [e.g., "DBS achieved 12% YoY reduction through RE100 + internal carbon price of $15/tCO2"]
+- **Recommendation**: [e.g., "Implement 5-point reduction program: 1) LED retrofit, 2) auto-shutdown, 3) solar pilot, 4) EV fleet, 5) green building certification"]
+- **Reference**: [e.g., "BRI Green Network: 118 EV cars + 150 bikes, solar panels at branches, 19.49% electricity savings at BRILiaN Tower"]
+- **Priority**: [High — GRI 305-5 compliance requires quantified reduction initiatives]
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.

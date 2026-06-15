@@ -1,0 +1,73 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-05
+# SECTION: INTENSITY
+# TOKEN_COUNT: ~400
+
+## SECTION TEMPLATE: GHG Emissions Intensity
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (MANDATORY — DO NOT MODIFY)
+title: "GRI 305-4: GHG Emissions Intensity"
+
+### OBJECTIVE
+Generate a disclosure section reporting GHG emissions intensity metrics for the
+reporting year. Intensity ratios normalize emissions against organizational metrics
+(revenue, FTE) to enable performance comparison over time and against peers.
+
+### DATA INPUT
+{
+  "intensity_tco2e_per_idr_bn": {intensity_tco2e_per_idr_bn},
+  "intensity_tco2e_per_fte": {intensity_tco2e_per_fte},
+  "total_tco2e": {total_tco2e},
+  "scope1_plus_scope2_tco2e": {scope1_plus_scope2_tco2e},
+  "revenue_idr_billion": {revenue_idr_billion},
+  "fte_count": {fte_count},
+  "prior_year_intensity_revenue": {prior_year_intensity_revenue},
+  "prior_year_intensity_fte": {prior_year_intensity_fte},
+  "yoy_intensity_revenue_change_pct": {yoy_intensity_revenue_change_pct},
+  "yoy_intensity_fte_change_pct": {yoy_intensity_fte_change_pct},
+  "base_year": {base_year},
+  "scope2_method_used": "market-based"
+}
+
+### RAG CONTEXT
+{rag_context_intensity}
+
+### REQUIRED ELEMENTS
+1. Opening paragraph: state both intensity metrics with units
+   - Revenue intensity: tCO2e per IDR billion
+   - FTE intensity: tCO2e per FTE
+2. Methodology paragraph: explain denominators (revenue source, FTE definition)
+3. Scope coverage statement:
+   - Revenue intensity: Scope 1 + 2 (market-based) + 3 Category 15 gross
+   - FTE intensity: Scope 1 + 2 (market-based) ONLY (operational emissions)
+4. Intensity calculation table: numerator, denominator, ratio for both metrics
+5. Year-over-year comparison (OMIT if prior_year values are NULL)
+6. Contextual interpretation: explain whether intensity improved/worsened and why
+   (e.g., revenue growth outpaced emissions growth → intensity improved)
+7. Peer comparison statement (INCLUDE if framework = IFRS_S2 or CSRD_ESRS_E1):
+   reference industry benchmarks if available
+
+### CALCULATION CONSTRAINT
+intensity_tco2e_per_idr_bn = total_tco2e / revenue_idr_billion
+intensity_tco2e_per_fte = scope1_plus_scope2_tco2e / fte_count
+Both must reconcile with stated numerators and denominators in narrative.
+
+### FRAMEWORK-SPECIFIC NOTES
+- GRI 305-4: Requires organization-specific metric (denominator) justification
+- IFRS S2: Requires industry-specific intensity metrics per SASB guidance
+- CSRD E1-6: Requires revenue-based intensity; FTE optional but recommended
+- OJK PSPK: Requires revenue-based intensity for financial institutions
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.
+
+### ADVISORY RECOMMENDATION BLOCK (MANDATORY)
+Generate 2-3 specific recommendations referencing peer banks from RAG CONTEXT:
+- **Finding**: [Observation about intensity trend]
+- **Benchmark**: [Peer comparison, e.g., "DBS energy intensity decreased 8.3% YoY to 14,200 MJ/employee"]
+- **Recommendation**: [Specific action with target]
+- **Reference**: [Bank name + implementation]
+- **Priority**: [High/Medium/Low]

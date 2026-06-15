@@ -1,0 +1,88 @@
+## SECTION: Climate-Related Financial Materiality Assessment
+## Covers: ESRS E1 (Double Materiality — DR E1-1 / IRO-1), IFRS S2 (Financial Impact)
+## Condition: Only generated for CSRD_ESRS_E1 and MULTI_FRAMEWORK
+
+### SECTION TITLE
+EXACT_TITLE: "Climate-Related Financial Materiality Assessment"
+
+### PURPOSE
+This section addresses the DOUBLE MATERIALITY requirement:
+- Impact Materiality (Inside-Out): How the institution's activities affect climate
+- Financial Materiality (Outside-In): How climate affects the institution's financial position
+
+### REQUIRED ELEMENTS
+
+#### 1. Impact Materiality Summary (Inside-Out) — 1 paragraph
+Reference the environmental sections already produced:
+"As disclosed in prior sections, the institution's operations and financed activities
+contribute {total_tco2e} tCO₂e, with {scope3_pct}% attributable to financed emissions
+concentrated in {top_3_sectors}."
+
+#### 2. Financial Materiality Assessment (Outside-In)
+
+##### 2.1 Physical Risk Exposure
+- What % of lending portfolio is in climate-vulnerable sectors/geographies?
+- Key physical risks: flooding (coastal assets), drought (agriculture), extreme heat (operations)
+- If data available: state portfolio-at-risk value
+- If data NOT available: state explicitly as gap:
+  "❌ GAP: Physical risk assessment not yet conducted. Required by ESRS E1 DR E1-9 / IFRS S2 Para 22. Timeline: FY{reporting_year + 1}."
+
+##### 2.2 Transition Risk Exposure
+- Portfolio in carbon-intensive sectors (use sector concentration from Scope 3 data)
+- Stranded asset risk: exposure to fossil fuel sectors
+- Regulatory risk: OJK taxonomy compliance, potential capital requirements
+- Client transition readiness
+
+##### 2.3 Financial Impact Quantification
+- If available: Expected Credit Loss impact under climate scenarios
+- If NOT available (expected for POC):
+  "❌ GAP: Climate stress testing not yet integrated into credit risk framework.
+  Required by: IFRS S2 Para 22 (scenario analysis), ESRS E1 DR E1-9, Bank Indonesia KBKM.
+  Peer status: BRI conducted first climate stress test 2023, BCA piloting 2024.
+  Timeline: FY{reporting_year + 1}."
+
+##### 2.4 Opportunity Assessment
+- Green finance portfolio growth
+- Sustainable product revenue
+- Energy cost reduction from efficiency programs
+
+#### 3. Maturity Self-Assessment Table (MANDATORY)
+Generate a table:
+| Assessment Element | Current Status | Framework Requirement | Gap Level | Timeline to Close |
+|---|---|---|---|---|
+| Physical risk assessment | ❌ Not conducted | ESRS E1 DR E1-9, IFRS S2 Para 22 | Critical | FY{reporting_year + 1} |
+| Transition risk assessment | ⚠️ Qualitative only | ESRS E1 DR E1-3, IFRS S2 Para 22 | Medium | FY{reporting_year + 1} |
+| Climate scenario analysis | ❌ Not conducted | ESRS E1 DR E1-3, IFRS S2 Para 22 | Critical | FY{reporting_year + 1} |
+| Financial impact quantification | ❌ Not quantified | IFRS S2 Para 25-26 | Critical | FY{reporting_year + 2} |
+| Climate VaR / stress testing | ❌ Not integrated | Bank Indonesia KBKM | Critical | FY{reporting_year + 2} |
+| Opportunity sizing | ⚠️ Qualitative only | ESRS E1 DR E1-3 | Medium | FY{reporting_year + 1} |
+
+#### 4. Regulatory Context
+Reference relevant regulations:
+- Presidential Regulation No. 98/2021 (Nilai Ekonomi Karbon)
+- OJK Taksonomi Hijau Indonesia
+- Bank Indonesia KBKM (Kebijakan Kehati-hatian Berbasis Iklim)
+- EU CSRD timeline (if applicable to parent/subsidiary)
+
+### GAP FORMATTING RULES
+For every gap identified, use this exact format:
+"❌ GAP: [What's missing — plain language]
+Required by: [Framework reference + paragraph/article]
+Peer benchmark: [Which peer bank has done this + when]
+Business risk: [What happens if not addressed — regulatory fine, rating downgrade, etc.]
+Timeline: [When institution plans to address]"
+
+### OUTPUT JSON
+{
+  "section_id": "double_materiality",
+  "title": "Climate-Related Financial Materiality Assessment",
+  "paragraphs": [...],
+  "tables": [...],
+  "insight_box": {"headline": "...", "body": "...", "severity": "critical"},
+  "diagnostic": {"text": "...", "root_causes": [...], "risk_implications": [...]},
+  "priority_actions": [...],
+  "charts": [],
+  "kpi_highlights": [],
+  "framework_references": ["ESRS E1 DR E1-1", "ESRS E1 DR E1-9", "IFRS S2 Para 22-26"],
+  "footnotes": [...]
+}

@@ -1,0 +1,59 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-03
+# SECTION: SCOPE2_INDIRECT
+# TOKEN_COUNT: ~400
+
+## SECTION TEMPLATE: Scope 2 Energy Indirect GHG Emissions
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (MANDATORY — DO NOT MODIFY)
+title: "GRI 305-2: Energy Indirect (Scope 2) GHG Emissions"
+
+### OBJECTIVE
+Generate a disclosure section reporting Scope 2 energy indirect GHG emissions.
+DUAL REPORTING IS MANDATORY: both location-based and market-based figures must
+appear in the narrative. Explain the difference and contractual instruments used.
+
+### DATA INPUT
+{
+  "scope2_location_tco2e": {scope2_location_tco2e},
+  "scope2_market_tco2e": {scope2_market_tco2e},
+  "total_consumption_mwh": {total_consumption_mwh},
+  "grid_ef_kgco2_kwh": {grid_ef_kgco2_kwh},
+  "rec_mwh_applied": {rec_mwh_applied},
+  "rec_applied_pct": {rec_applied_pct},
+  "prior_year_scope2_location": {prior_year_scope2_location},
+  "prior_year_scope2_market": {prior_year_scope2_market},
+  "yoy_scope2_change_pct": {yoy_scope2_change_pct},
+  "grid_region": "{grid_region}",
+  "methodology": "GHG_Protocol_Scope2_Guidance_2015"
+}
+
+### RAG CONTEXT
+{rag_context_scope2}
+
+### REQUIRED ELEMENTS
+1. Opening paragraph: state BOTH location-based and market-based Scope 2 with units
+2. Methodology: grid emission factor source (PLN 2023), location vs market method explanation
+3. Contractual instruments paragraph (INCLUDE if rec_applied_pct > 0): RECs, renewable coverage %
+4. Dual reporting table: Location-based | Market-based | Difference
+5. Year-over-year comparison (OMIT if {yoy_scope2_change_pct} is NULL)
+6. Grid region context: state which grid EF applied and source
+
+### DUAL REPORTING CONSTRAINT (GHG Protocol Scope 2 Guidance)
+BOTH scope2_location_tco2e AND scope2_market_tco2e MUST appear in the output.
+Market-based can be zero (100% renewable) but MUST still be stated.
+Location-based is the PRIMARY disclosure per GHG Protocol hierarchy.
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.
+
+### ADVISORY RECOMMENDATION BLOCK (MANDATORY)
+Generate 2-3 specific recommendations referencing peer banks from RAG CONTEXT:
+- **Finding**: [Observation from data]
+- **Benchmark**: [Peer comparison, e.g., "DBS sources 62% renewable energy as RE100 member"]
+- **Recommendation**: [Specific action with target]
+- **Reference**: [Bank name + what they did]
+- **Priority**: [High/Medium/Low]

@@ -1,0 +1,66 @@
+# VERSION: 2.0.0
+# LAST_MODIFIED: 2026-06-10
+# SECTION: INTENSITY_UNIFIED
+# MODE: MULTI_FRAMEWORK
+
+## SECTION TITLE (MANDATORY)
+title: "1.4 GHG Emissions Intensity"
+
+## FRAMEWORKS ADDRESSED
+- GRI 305-4 — GHG emissions intensity
+- IFRS S2 Paragraph 29(b) — intensity metrics for cross-industry comparison
+- ESRS E1-6 DR E1-6.53 — GHG intensity per net revenue
+- OJK PSPK — Intensitas Emisi GRK per pendapatan
+
+## DATA INPUT
+{
+  "intensity_tco2e_per_idr_bn": from ghg_summary,
+  "intensity_tco2e_per_fte": from ghg_summary,
+  "revenue_idr_billion": from input,
+  "prior_year_intensity_revenue": from prior_year_summary,
+  "prior_year_intensity_fte": from prior_year_summary,
+  "yoy_intensity_revenue_change_pct": computed,
+  "yoy_intensity_fte_change_pct": computed
+}
+
+## REQUIRED ELEMENTS
+
+### 1. Opening Paragraph
+- Revenue-based intensity (tCO₂e per IDR billion)
+- FTE-based intensity (tCO₂e per employee)
+- Both metrics mandatory per GRI 305-4 + ESRS E1-6.53
+
+### 2. Methodology
+- Numerator: Scope 1 + 2 + 3 Cat 15 gross (for revenue intensity)
+- Numerator: Scope 1 + 2 only (for FTE intensity — operational)
+- Denominator: revenue (IDR billion), FTE count
+- Justification for denominator selection per GRI 305-4
+
+### 3. Intensity Table (MANDATORY)
+| Metric | Numerator | Denominator | Ratio | Unit |
+| Revenue Intensity | ... | ... | ... | tCO₂e/IDR Bn |
+| FTE Intensity | ... | ... | ... | tCO₂e/FTE |
+
+### 4. YoY Comparison Table
+| Metric | Current | Prior Year | Change (%) |
+- Explain whether improvement/worsening and why
+
+### 5. Contextual Interpretation
+- Revenue growth vs emissions growth → intensity direction
+- Operational efficiency narrative
+
+### 6. Framework Cross-Reference Table (MANDATORY)
+| Framework | Disclosure Ref | Requirement | Status |
+|-----------|---------------|-------------|--------|
+| GRI 305-4 | 305-4a | GHG intensity ratio | ✅ Disclosed |
+| GRI 305-4 | 305-4b | Organization-specific metric | ✅ Disclosed |
+| GRI 305-4 | 305-4c | Types of GHG included | ✅ Disclosed |
+| IFRS S2 | Para 29(b) | Intensity metrics | ✅ Disclosed |
+| ESRS E1 | DR E1-6.53 | GHG intensity per net revenue | ✅ Disclosed |
+| OJK PSPK | Intensitas Emisi | tCO₂e per pendapatan | ✅ Disclosed |
+
+### 7. Advisory Recommendations (MANDATORY)
+2-3 recommendations (intensity improvement target, peer benchmark comparison)
+
+## OUTPUT FORMAT
+Return JSON per system_base.txt. Include "framework_cross_reference" field.

@@ -1,0 +1,89 @@
+# VERSION: 2.0.0
+# LAST_MODIFIED: 2026-06-10
+# SECTION: TARGETS_UNIFIED
+# MODE: MULTI_FRAMEWORK
+
+## SECTION TITLE (MANDATORY)
+title: "3.2 Climate Targets & Transition Plan"
+
+## FRAMEWORKS ADDRESSED
+- IFRS S2 Paragraph 33-37 — Climate-related targets, metrics, transition plan
+- GRI 305-5 — Reduction targets (quantitative)
+- ESRS E1-4 DR E1-4 — GHG reduction targets, decarbonization levers
+- OJK PSPK — Target Iklim & Rencana Transisi
+
+## DATA INPUT
+Target data fields (most likely NULL for this institution):
+{
+  "target_scope1_2030_tco2e", "target_scope2_2030_tco2e",
+  "target_total_2030_reduction_pct", "target_net_zero_year",
+  "target_validated_sbti", "progress_vs_target_pct",
+  "renewable_energy_target_pct", "renewable_energy_current_pct"
+}
+
+## CONDITIONAL DISCLOSURE LOGIC
+
+IF target data fields are populated:
+  → Generate FULL disclosure (targets + progress + transition plan)
+
+IF SOME fields available (e.g., net_zero_year set but no interim):
+  → PARTIAL disclosure + gap analysis for missing milestones
+
+IF ALL target data is NULL:
+  → Generate STRATEGIC ROADMAP section:
+    1. State each framework requirement for target-setting
+    2. Explain why targets are foundational for climate credibility
+    3. Peer comparison:
+       - BRI: SBTi committed (first Indonesian FI), portfolio temp 1.75°C by 2040
+       - DBS: Net Zero 2050, SBTi submitted, RE100, internal carbon price $15/tCO₂
+       - BCA: Climate Change Strategy, SFAP exceeding target
+    4. Recommended target-setting roadmap:
+       - Year 1: SBTi commitment letter + baseline year
+       - Year 2: Interim targets (2025, 2030)
+       - Year 3: Full transition plan + scenario analysis
+    5. Quick wins vs structural changes
+
+## REQUIRED ELEMENTS (when data available)
+
+### 1. Headline Target
+- "X% reduction by 2030 vs [base year] baseline"
+- Scope coverage (1+2 only, or all scopes)
+
+### 2. Target Specification Table
+| Target | Scope | Value | Base Year | Target Year | SBTi Validated |
+
+### 3. Net Zero Commitment (if available)
+- Target year, residual emissions strategy
+
+### 4. Interim Milestones Table
+| Milestone Year | Target | Progress | Status |
+
+### 5. Reduction Initiatives (from RAG benchmarks)
+- Energy efficiency, renewables, fleet electrification
+- Expected contribution per initiative
+- Implementation timeline
+
+### 6. Decarbonization Levers (ESRS E1-4 mandatory)
+- Own operations: efficiency, fuel switching, renewables
+- Value chain: client engagement, portfolio alignment
+
+### 7. Framework Cross-Reference Table (MANDATORY)
+| Framework | Disclosure Ref | Requirement | Status |
+|-----------|---------------|-------------|--------|
+| IFRS S2 | Para 33 | Quantitative/qualitative targets | ⚠️ Gap |
+| IFRS S2 | Para 34 | Target metrics and base period | ⚠️ Gap |
+| IFRS S2 | Para 35 | Approach to target-setting | ⚠️ Gap |
+| IFRS S2 | Para 36 | Progress toward targets | ⚠️ Gap |
+| GRI 305-5 | 305-5a | Reductions achieved (tCO₂e) | ⚠️ Partial |
+| ESRS E1 | DR E1-4 | GHG reduction targets | ⚠️ Gap |
+| ESRS E1 | DR E1-4 | Decarbonization levers | ⚠️ Gap |
+| OJK PSPK | Target Iklim | Aligned with national NDC | ⚠️ Gap |
+
+### 8. Advisory Recommendations (MANDATORY — HIGH PRIORITY)
+- Submit SBTi commitment letter (ref: BRI — first Indonesian FI)
+- Set 30% Scope 1+2 reduction by 2030 (ref: DBS pathway)
+- Establish internal carbon price (ref: DBS $15/tCO₂)
+- Join NZBA (ref: BRI, DBS members)
+
+## OUTPUT FORMAT
+Return JSON per system_base.txt. Include "framework_cross_reference" field.

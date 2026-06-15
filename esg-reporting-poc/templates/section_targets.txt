@@ -1,0 +1,118 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-05
+# SECTION: TARGETS
+# TOKEN_COUNT: ~550
+
+## SECTION TEMPLATE: Targets & Reduction Initiatives
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (MANDATORY — DO NOT MODIFY)
+title: "Climate Targets & Reduction Initiatives"
+
+### OBJECTIVE
+Generate a disclosure section presenting the organization's climate-related targets,
+reduction initiatives, and progress toward achieving those targets. This section
+demonstrates strategic commitment and accountability for climate action.
+
+### DATA INPUT
+{
+  "target_scope1_2030_tco2e": {target_scope1_2030_tco2e},
+  "target_scope2_2030_tco2e": {target_scope2_2030_tco2e},
+  "target_scope3_2030_tco2e": {target_scope3_2030_tco2e},
+  "target_total_2030_reduction_pct": {target_total_2030_reduction_pct},
+  "target_2030_base_year": {target_2030_base_year},
+  "target_net_zero_year": {target_net_zero_year},
+  "target_validated_sbti": {target_validated_sbti},
+  "target_interim_milestones": {target_interim_milestones_json},
+  "reduction_initiatives": {reduction_initiatives_json},
+  "progress_vs_target_pct": {progress_vs_target_pct},
+  "carbon_offset_planned_use": {carbon_offset_planned_use},
+  "offset_type": "{offset_type}",
+  "offset_volume_tco2e": {offset_volume_tco2e},
+  "renewable_energy_target_pct": {renewable_energy_target_pct},
+  "renewable_energy_current_pct": {renewable_energy_current_pct}
+}
+
+### RAG CONTEXT
+{rag_context_targets}
+
+### REQUIRED ELEMENTS
+1. Opening paragraph: state headline target (e.g., "50% reduction by 2030 vs 2020 baseline")
+2. Target specification table:
+   - Scope 1 target (absolute tCO2e)
+   - Scope 2 target (absolute tCO2e)
+   - Scope 3 target (absolute tCO2e or intensity-based)
+   - Total reduction % vs base year
+   - Target year and base year
+3. Net zero commitment (INCLUDE if target_net_zero_year is not NULL):
+   - Target year for net zero
+   - Scope coverage (Scope 1+2 only, or all scopes)
+   - Residual emissions strategy
+4. SBTi validation statement (INCLUDE if target_validated_sbti = TRUE):
+   - State that targets are validated by Science Based Targets initiative
+   - Alignment with 1.5°C pathway
+5. Interim milestones table:
+   - 2025, 2027, 2030 targets (if applicable)
+   - Progress status for each milestone
+6. Reduction initiatives section:
+   - List key initiatives (e.g., renewable energy procurement, energy efficiency, fleet electrification)
+   - Expected contribution of each initiative (tCO2e reduction)
+   - Implementation timeline
+7. Progress assessment:
+   - Current year emissions vs target trajectory
+   - % progress toward 2030 target
+   - On track / ahead / behind assessment
+8. Decarbonization levers (MANDATORY for CSRD E1-4):
+   - Own operations: energy efficiency, fuel switching, electrification, renewables
+   - Value chain: supply chain engagement, financed emissions reduction
+9. Carbon offset strategy (INCLUDE if carbon_offset_planned_use = TRUE):
+   - Volume of offsets planned (tCO2e)
+   - Type of offsets (nature-based, technological removal)
+   - Certification scheme (e.g., Verra VCS, Gold Standard)
+   - Permanence and additionality considerations
+10. Renewable energy target (INCLUDE if renewable_energy_target_pct > 0):
+    - Target % renewable energy by target year
+    - Current % renewable energy
+    - Procurement strategy (PPAs, RECs, on-site generation)
+
+### FRAMEWORK-SPECIFIC NOTES
+- GRI 305-5: Requires reductions in tCO2e, base year, scopes, methodology
+- IFRS S2 Para 33-37: Requires quantitative targets, metrics, base period, milestones
+- CSRD E1-4: Requires GHG reduction targets + decarbonization levers by scope
+- OJK PSPK: Requires climate targets aligned with national NDC commitments
+
+### CRITICAL CONSTRAINT
+If target is NET (includes offsets), GROSS target MUST also be disclosed separately.
+Offset volume MUST NOT exceed 20% of gross target per best practice (unless justified).
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.
+
+### CONDITIONAL DISCLOSURE LOGIC
+IF all required target data fields are populated in DATA INPUT:
+  → Generate FULL disclosure per REQUIRED ELEMENTS above
+
+IF some fields are NULL/empty:
+  → Generate PARTIAL disclosure:
+    1. Present available data (e.g., if only net_zero_year is set, report that commitment)
+    2. Add "Disclosure Gap Analysis" table for missing targets
+    3. Generate recommendations for setting targets
+    4. State: "Target-setting in progress — full disclosure expected by [next year]"
+
+IF ALL target data fields are NULL/placeholder:
+  → Generate STRATEGIC ROADMAP section:
+    1. State each required target type per framework (GRI 305-5, IFRS S2 Para 33-37)
+    2. Explain why targets are foundational for climate strategy credibility
+    3. Peer comparison: what targets BRI, DBS, BCA have set (from RAG CONTEXT)
+    4. Recommended target-setting process and timeline
+    5. Quick-win: "Commit to SBTi within 12 months" per BRI precedent
+
+### ADVISORY RECOMMENDATION BLOCK (MANDATORY)
+Generate 2-3 specific recommendations referencing peer banks from RAG CONTEXT:
+- **Finding**: [e.g., "No science-based targets set; no interim milestones defined"]
+- **Benchmark**: [e.g., "BRI is first Indonesian FI to submit SBTi commitment; DBS targets Net Zero by 2050 with 2030 interim"]
+- **Recommendation**: [e.g., "Submit SBTi commitment letter and set 30% Scope 1+2 reduction target by 2030 vs 2023 baseline"]
+- **Reference**: [e.g., "BRI pathway: portfolio temperature target 1.75°C by 2040, annual reduction 0.0783°C/year"]
+- **Priority**: [High — regulatory trajectory mandates target-setting]

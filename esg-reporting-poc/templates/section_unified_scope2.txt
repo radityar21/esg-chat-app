@@ -1,0 +1,70 @@
+# VERSION: 2.0.0
+# LAST_MODIFIED: 2026-06-10
+# SECTION: SCOPE2_UNIFIED
+# MODE: MULTI_FRAMEWORK
+
+## SECTION TITLE (MANDATORY)
+title: "1.2 Energy Indirect GHG Emissions — Scope 2"
+
+## FRAMEWORKS ADDRESSED
+- GRI 305-2 (Disclosures a through g) — DUAL REPORTING mandatory
+- IFRS S2 Paragraph 29(a)(ii) — absolute gross Scope 2 (location + market)
+- ESRS E1-6 DR E1-6.46 — gross location-based + market-based Scope 2
+- OJK PSPK — Emisi GRK Tidak Langsung dari Energi (Lingkup 2)
+
+## DATA INPUT
+{
+  "scope2_location_tco2e": from ghg_summary,
+  "scope2_market_tco2e": from ghg_summary,
+  "prior_year_scope2_location": from prior_year_summary,
+  "prior_year_scope2_market": from prior_year_summary,
+  "yoy_scope2_change_pct": from ghg_summary
+}
+
+## NARRATIVE APPROACH
+Single coherent narrative. DUAL REPORTING IS MANDATORY: both location-based
+and market-based figures must appear with clear explanation of difference.
+
+## REQUIRED ELEMENTS
+
+### 1. Opening Paragraph
+- Location-based Scope 2 total (tCO₂e)
+- Market-based Scope 2 total (tCO₂e)
+- Explanation of dual reporting requirement
+
+### 2. Methodology
+- Grid emission factor: PLN 2023 (0.7886 kgCO₂/kWh)
+- GHG Protocol Scope 2 Guidance (2015)
+- Location vs market method explanation
+
+### 3. Contractual Instruments (if market != location)
+- RECs applied, renewable coverage %
+- Residual mix explanation
+
+### 4. Dual Reporting Table (MANDATORY)
+| Method | Scope 2 (tCO₂e) | Prior Year | Change (%) |
+| Location-based | ... | ... | ... |
+| Market-based | ... | ... | ... |
+
+### 5. YoY Analysis
+- Drivers of change (grid factor update, consumption change, RE procurement)
+
+### 6. Framework Cross-Reference Table (MANDATORY)
+| Framework | Disclosure Ref | Requirement | Status |
+|-----------|---------------|-------------|--------|
+| GRI 305-2 | 305-2a | Gross location-based Scope 2 | ✅ Disclosed |
+| GRI 305-2 | 305-2b | Gross market-based Scope 2 | ✅ Disclosed |
+| GRI 305-2 | 305-2e | Emission factors source | ✅ Disclosed |
+| IFRS S2 | Para 29(a)(ii) | Absolute gross Scope 2 | ✅ Disclosed |
+| ESRS E1 | DR E1-6.46 | Location + market-based | ✅ Disclosed |
+| OJK PSPK | Emisi Lingkup 2 | Emisi tidak langsung energi | ✅ Disclosed |
+
+### 7. Advisory Recommendations (MANDATORY)
+2-3 recommendations with peer benchmarks (DBS RE100, BRI green building, etc.)
+
+## CONSTRAINTS
+- BOTH location AND market MUST appear (GHG Protocol Scope 2 Guidance)
+- VAL-NUM-01 applies
+
+## OUTPUT FORMAT
+Return JSON per system_base.txt. Include "framework_cross_reference" field.

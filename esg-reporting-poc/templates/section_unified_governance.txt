@@ -1,0 +1,85 @@
+# VERSION: 2.0.0
+# LAST_MODIFIED: 2026-06-10
+# SECTION: GOVERNANCE_UNIFIED
+# MODE: MULTI_FRAMEWORK
+
+## SECTION TITLE (MANDATORY)
+title: "3.1 Climate Governance & ESG Oversight"
+
+## FRAMEWORKS ADDRESSED
+- IFRS S2 Paragraph 5-7 — Governance of climate-related risks
+- GRI 2-12 / 2-13 — Role of highest governance body in sustainability
+- ESRS 2 GOV-3 — Integration of sustainability in incentive schemes
+- OJK PSPK — Tata Kelola Keberlanjutan (mandatory board oversight)
+
+## DATA INPUT
+Governance data fields (most likely NULL for this institution):
+{
+  "board_committee_name", "board_oversight_frequency",
+  "climate_expertise_present", "management_committee_name",
+  "executive_remuneration_linked", "remuneration_climate_pct",
+  "target_setting_authority", "target_monitoring_frequency"
+}
+
+## CONDITIONAL DISCLOSURE LOGIC
+
+IF ALL governance data fields are populated:
+  → Generate FULL disclosure per required elements
+
+IF SOME fields are NULL:
+  → PARTIAL disclosure + gap analysis for missing items
+
+IF ALL governance data fields are NULL/placeholder:
+  → Generate FULL GAP ANALYSIS section:
+    1. State EACH framework requirement (what SHOULD be disclosed)
+    2. For each: cite paragraph reference, describe what's needed
+    3. Table: Requirement → Standard Ref → Status (Not Available) → Priority
+    4. Peer comparison from RAG CONTEXT:
+       - BRI: ESG Committee since 2021, BoD-level, quarterly review
+       - DBS: Board Sustainability Committee, CSO role, 20% remuneration linkage
+       - BCA: ESG Subdivision → Director Planning & Finance, KPIs in BoD performance
+    5. Specific recommendations to establish governance infrastructure
+    6. Timeline for full disclosure
+
+## REQUIRED ELEMENTS (when data available)
+
+### 1. Board Oversight
+- Committee name and composition
+- Frequency of climate review
+- How climate informs strategy
+
+### 2. Management Role
+- Responsible position/committee
+- Reporting lines
+- Enterprise risk integration
+
+### 3. Target Oversight
+- Who sets climate targets
+- Monitoring and reporting cadence
+
+### 4. Remuneration Linkage
+- % linked to climate metrics
+- Which metrics used
+
+### 5. Framework Cross-Reference Table (MANDATORY)
+| Framework | Disclosure Ref | Requirement | Status |
+|-----------|---------------|-------------|--------|
+| IFRS S2 | Para 5 | Governance body identification | ⚠️ Gap |
+| IFRS S2 | Para 6 | Management's role | ⚠️ Gap |
+| IFRS S2 | Para 7 | How reflected in strategy | ⚠️ Gap |
+| GRI 2-12 | 2-12a | Governance body oversight | ⚠️ Gap |
+| GRI 2-13 | 2-13a | Delegation of responsibility | ⚠️ Gap |
+| ESRS 2 | GOV-3 | Incentive schemes | ⚠️ Gap |
+| OJK PSPK | Tata Kelola | Board-level sustainability | ⚠️ Gap |
+
+(Change ⚠️ to ✅ where data IS available)
+
+### 6. Advisory Recommendations (MANDATORY — HIGH PRIORITY for governance gaps)
+- Establish Board-level ESG Committee (ref: BRI model — NOKEP 872-DIR/2022)
+- Link 10-20% executive remuneration to ESG KPIs (ref: DBS 20% weight)
+- Quarterly Board ESG review cadence (ref: BCA ≥4x/year)
+- Appoint Chief Sustainability Officer (ref: DBS CSO structure)
+
+## OUTPUT FORMAT
+Return JSON per system_base.txt. Include "framework_cross_reference" field.
+Mark each requirement as ✅ Disclosed, ⚠️ Gap, or 🔲 Partial.

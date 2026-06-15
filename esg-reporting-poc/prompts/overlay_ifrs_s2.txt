@@ -1,0 +1,46 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-03
+# FRAMEWORK: IFRS_S2
+# TOKEN_COUNT: ~500
+# COMPATIBLE_MODEL: anthropic.claude-*
+
+## FRAMEWORK: IFRS S2 Climate-related Disclosures (June 2023)
+
+You are generating disclosures per IFRS S2 using the TCFD four-pillar structure. Financial institution context with SASB FN-CB-410 industry standard.
+
+### FOUR-PILLAR STRUCTURE
+
+**Governance (S2.6–S2.10):** Role of governing body in overseeing climate risks; management-level processes for assessing and managing; oversight frequency and escalation.
+
+**Strategy (S2.11–S2.22):** Climate risks and opportunities over short/medium/long term; business model impact; scenario analysis (1.5°C and 2.0°C pathways); transition risks (policy, legal, technology, market, reputational); physical risks (acute, chronic) with geographic specificity.
+
+**Risk Management (S2.23–S2.25):** Processes to identify, assess, manage climate risks; integration into enterprise risk management framework.
+
+**Metrics & Targets (S2.26–S2.42):** GHG Scope 1, 2, 3 in tCO2e per GHG Protocol; financed emissions via PCAF; absolute/intensity climate targets with base year; internal carbon price if applied; SASB FN-CB-410 industry metrics.
+
+### MANDATORY PHRASE CONVENTIONS
+- "climate-related risks and opportunities" (never "climate risks" alone)
+- "financed emissions" (never "portfolio emissions" or "lending emissions")
+- "transition plan" (never "decarbonisation plan")
+- "scenario analysis" (never "stress testing" unless ERM context)
+- "cross-industry metric" (never "universal metric")
+- "industry-based metric" (for SASB FN-CB-410)
+- "governing body" (never "board" unless quoting local regulation)
+
+### TIME HORIZON DEFINITIONS (MUST STATE IN STRATEGY)
+- Short-term: 0–2 years (financial reporting cycle)
+- Medium-term: 2–5 years (strategic planning cycle)
+- Long-term: 5–30+ years (beyond strategic horizon)
+
+### SASB FN-CB-410 METRICS
+- FN-CB-410a.1: Commercial/industrial credit exposure by industry
+- FN-CB-410a.2: Approach to ESG in credit analysis (qualitative)
+- FN-CB-410a.3: Financed emissions Scope 3 Cat.15 (PCAF tCO2e)
+
+### PARAGRAPH COUNT
+- Governance: 3–4 paragraphs
+- Strategy: 5–7 paragraphs
+- Risk Management: 3–4 paragraphs
+- Metrics & Targets: 6–8 paragraphs + SASB table + intensity table
+- Scope 1 section: 3–5 paragraphs + cross-industry metric table (ref IFRS S2 para 29(a))
+- PCAF section: 6–8 paragraphs + sector table + SASB FN-CB-410a.3 table

@@ -1,0 +1,556 @@
+{
+  "Comment": "ESG Report Generation State Machine (Spec §9)",
+  "StartAt": "ValidateInput",
+  "States": {
+
+    "ValidateInput": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-validate-input",
+      "ResultPath": "$.validation",
+      "Next": "CheckValidation",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ExecutionFailed",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+
+    "CheckValidation": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.validation.status",
+          "StringEquals": "PASS",
+          "Next": "WaitForGlueJobs"
+        }
+      ],
+      "Default": "ExecutionFailed"
+    },
+
+    "WaitForGlueJobs": {
+      "Type": "Parallel",
+      "ResultPath": "$.glue_results",
+      "Next": "TriggerAggregation",
+      "Branches": [
+        {
+          "StartAt": "TriggerGlueScope1",
+          "States": {
+            "TriggerGlueScope1": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "esg-etl-scope1-direct",
+                "Arguments": {
+                  "--REPORTING_YEAR.$": "States.Format('{}', $.validation.validated_input.reporting_year)"
+                }
+              },
+              "End": true,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "IntervalSeconds": 30,
+                  "MaxAttempts": 1,
+                  "BackoffRate": 2.0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "StartAt": "TriggerGlueScope2",
+          "States": {
+            "TriggerGlueScope2": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "esg-etl-scope2-indirect",
+                "Arguments": {
+                  "--REPORTING_YEAR.$": "States.Format('{}', $.validation.validated_input.reporting_year)"
+                }
+              },
+              "End": true,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "IntervalSeconds": 30,
+                  "MaxAttempts": 1,
+                  "BackoffRate": 2.0
+                }
+              ]
+            }
+          }
+        },
+        {
+          "StartAt": "TriggerGlueScope3",
+          "States": {
+            "TriggerGlueScope3": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "esg-etl-scope3-pcaf",
+                "Arguments": {
+                  "--REPORTING_YEAR.$": "States.Format('{}', $.validation.validated_input.reporting_year)"
+                }
+              },
+              "End": true,
+              "Retry": [
+                {
+                  "ErrorEquals": ["States.ALL"],
+                  "IntervalSeconds": 30,
+                  "MaxAttempts": 1,
+                  "BackoffRate": 2.0
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ExecutionFailed",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+
+    "TriggerAggregation": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "esg-etl-aggregation",
+        "Arguments": {
+          "--REPORTING_YEAR.$": "States.Format('{}', $.validation.validated_input.reporting_year)"
+        }
+      },
+      "ResultPath": "$.aggregation_result",
+      "Next": "QueryAthena",
+      "Retry": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "IntervalSeconds": 30,
+          "MaxAttempts": 1,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ExecutionFailed",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+
+    "QueryAthena": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-athena-query",
+      "Parameters": {
+        "reporting_year.$": "$.validation.validated_input.reporting_year",
+        "bank_id.$": "$.validation.validated_input.bank_id",
+        "execution_id.$": "$$.Execution.Id"
+      },
+      "ResultPath": "$.athena_query_result",
+      "Next": "GenerateSections",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ExecutionFailed",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+
+    "GenerateSections": {
+      "Type": "Map",
+      "ItemsPath": "$.validation.validated_input.section_templates",
+      "MaxConcurrency": 2,
+      "ResultPath": "$.generated_sections",
+      "ToleratedFailurePercentage": 10,
+
+      "ItemSelector": {
+        "template_config.$": "$$.Map.Item.Value",
+        "data_input.$": "$.athena_query_result",
+        "kb_id.$": "$.validation.validated_input.kb_id",
+        "execution_id.$": "$$.Execution.Id",
+        "reporting_year.$": "$.validation.validated_input.reporting_year"
+      },
+      "Iterator": {
+        "StartAt": "InvokeSectionGen",
+        "States": {
+
+          "InvokeSectionGen": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-section-gen",
+            "Parameters": {
+              "section_id.$": "$.template_config.template_id",
+              "framework.$": "$.template_config.framework",
+              "reporting_year.$": "$.reporting_year",
+              "metrics_json.$": "$.data_input",
+              "kb_id.$": "$.kb_id",
+              "execution_id.$": "$.execution_id"
+            },
+            "ResultPath": "$.section_result",
+            "Next": "CheckFirstResult",
+            "Retry": [
+              {
+                "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"],
+                "IntervalSeconds": 10,
+                "MaxAttempts": 2,
+                "BackoffRate": 3.0
+              }
+            ],
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "SectionFailed",
+                "ResultPath": "$.error"
+              }
+            ]
+          },
+
+          "CheckFirstResult": {
+            "Type": "Choice",
+            "Comment": "Check if SectionGen returned valid content (S3 key or inline JSON)",
+            "Choices": [
+              {
+                "Variable": "$.section_result.content_s3_key",
+                "IsPresent": true,
+                "Next": "InvokeValidation"
+              },
+              {
+                "Variable": "$.section_result.content_json",
+                "IsPresent": true,
+                "Next": "InvokeValidation"
+              }
+            ],
+            "Default": "SectionFailed"
+          },
+
+          "InvokeValidation": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-validation",
+            "Parameters": {
+              "content_s3_key.$": "$.section_result.content_s3_key",
+              "content_s3_bucket.$": "$.section_result.content_s3_bucket",
+              "source_metrics.$": "$.data_input",
+              "framework.$": "$.template_config.framework",
+              "section_id.$": "$.section_result.section_id",
+              "execution_id.$": "$.execution_id",
+              "retry_count": 0
+            },
+            "ResultPath": "$.validation_result",
+            "Next": "ValidationChoice"
+          },
+
+          "ValidationChoice": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                "Variable": "$.validation_result.validation_outcome",
+                "StringEquals": "PASS",
+                "Next": "AccumulateSection"
+              },
+              {
+                "Variable": "$.validation_result.validation_outcome",
+                "StringEquals": "WARN",
+                "Next": "AccumulateWithWarning"
+              },
+              {
+                "Variable": "$.validation_result.validation_outcome",
+                "StringEquals": "RETRY",
+                "Next": "RetryGeneration"
+              },
+              {
+                "Variable": "$.validation_result.validation_outcome",
+                "StringEquals": "FAIL_NO_RETRY",
+                "Next": "HumanReviewGate"
+              }
+            ],
+            "Default": "HumanReviewGate"
+          },
+
+          "RetryGeneration": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-section-gen",
+            "Parameters": {
+              "section_id.$": "$.template_config.template_id",
+              "framework.$": "$.template_config.framework",
+              "reporting_year.$": "$.reporting_year",
+              "metrics_json.$": "$.data_input",
+              "kb_id.$": "$.kb_id",
+              "execution_id.$": "$.execution_id"
+            },
+            "ResultPath": "$.section_result",
+            "Next": "RetryValidation"
+          },
+
+          "RetryValidation": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-validation",
+            "Parameters": {
+              "content_s3_key.$": "$.section_result.content_s3_key",
+              "content_s3_bucket.$": "$.section_result.content_s3_bucket",
+              "source_metrics.$": "$.data_input",
+              "framework.$": "$.template_config.framework",
+              "section_id.$": "$.section_result.section_id",
+              "execution_id.$": "$.execution_id",
+              "retry_count": 1
+            },
+            "ResultPath": "$.validation_result",
+            "Next": "RetryChoice"
+          },
+
+          "RetryChoice": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                "Variable": "$.validation_result.validation_outcome",
+                "StringEquals": "PASS",
+                "Next": "AccumulateSection"
+              },
+              {
+                "Variable": "$.validation_result.validation_outcome",
+                "StringEquals": "WARN",
+                "Next": "AccumulateWithWarning"
+              }
+            ],
+            "Default": "HumanReviewGate"
+          },
+
+          "HumanReviewGate": {
+            "Type": "Task",
+            "Comment": "Auto-approve: Send SNS notification with validation details, then proceed. No waitForTaskToken.",
+            "Resource": "arn:aws:states:::sns:publish",
+            "Parameters": {
+              "TopicArn": "arn:aws:sns:us-east-1:061039769766:ESG-HumanReview",
+              "Subject": "ESG Section Auto-Approved (Validation FAIL - Review Required)",
+              "Message.$": "States.Format('ESG Section AUTO-APPROVED (requires post-hoc review)\n\nSection: {}\nRetry Count: {}\n\nValidation Details:\n{}\n\nThis section was included in the report despite validation failure. Please review the generated DOCX for accuracy.', $.section_result.section_id, $.validation_result.retry_count, States.JsonToString($.validation_result))"
+            },
+            "ResultPath": "$.sns_notification",
+            "Next": "AccumulateWithWarning"
+          },
+
+          "AccumulateSection": {
+            "Type": "Pass",
+            "Parameters": {
+              "section_id.$": "$.section_result.section_id",
+              "section_result.$": "$.section_result",
+              "framework.$": "$.template_config.framework",
+              "status": "INCLUDED"
+            },
+            "End": true
+          },
+
+          "AccumulateWithWarning": {
+            "Type": "Pass",
+            "Parameters": {
+              "section_id.$": "$.section_result.section_id",
+              "section_result.$": "$.section_result",
+              "framework.$": "$.template_config.framework",
+              "status": "INCLUDED_WITH_WARNINGS"
+            },
+            "End": true
+          },
+
+          "SectionFailed": {
+            "Type": "Wait",
+            "Seconds": 15,
+            "Comment": "Wait before retrying failed section (transient Bedrock errors)",
+            "Next": "RetryAfterFailure"
+          },
+
+          "RetryAfterFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-section-gen",
+            "Parameters": {
+              "section_id.$": "$.template_config.template_id",
+              "framework.$": "$.template_config.framework",
+              "reporting_year.$": "$.reporting_year",
+              "metrics_json.$": "$.data_input",
+              "kb_id.$": "$.kb_id",
+              "execution_id.$": "$.execution_id"
+            },
+            "ResultPath": "$.section_result",
+            "Next": "CheckRetryResult",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "SectionPermanentlyFailed",
+                "ResultPath": "$.error"
+              }
+            ]
+          },
+
+          "CheckRetryResult": {
+            "Type": "Choice",
+            "Comment": "Check if RetryAfterFailure returned valid content (S3 key or inline JSON)",
+            "Choices": [
+              {
+                "Variable": "$.section_result.content_s3_key",
+                "IsPresent": true,
+                "Next": "RetryAfterFailureValidation"
+              },
+              {
+                "Variable": "$.section_result.content_json",
+                "IsPresent": true,
+                "Next": "RetryAfterFailureValidation"
+              }
+            ],
+            "Default": "SectionPermanentlyFailed"
+          },
+
+          "RetryAfterFailureValidation": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-validation",
+            "Parameters": {
+              "content_s3_key.$": "$.section_result.content_s3_key",
+              "content_s3_bucket.$": "$.section_result.content_s3_bucket",
+              "source_metrics.$": "$.data_input",
+              "framework.$": "$.template_config.framework",
+              "section_id.$": "$.section_result.section_id",
+              "execution_id.$": "$.execution_id",
+              "retry_count": 2
+            },
+            "ResultPath": "$.validation_result",
+            "Next": "RetryAfterFailureChoice",
+            "Catch": [
+              {
+                "ErrorEquals": ["States.ALL"],
+                "Next": "AccumulateAfterFailureRetry",
+                "ResultPath": "$.validation_error"
+              }
+            ]
+          },
+
+          "RetryAfterFailureChoice": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                "Variable": "$.validation_result.validation_outcome",
+                "StringEquals": "PASS",
+                "Next": "AccumulateSection"
+              },
+              {
+                "Variable": "$.validation_result.validation_outcome",
+                "StringEquals": "WARN",
+                "Next": "AccumulateWithWarning"
+              }
+            ],
+            "Default": "AccumulateWithWarning"
+          },
+
+          "SectionPermanentlyFailed": {
+            "Type": "Pass",
+            "Parameters": {
+              "section_id.$": "$.template_config.template_id",
+              "framework.$": "$.template_config.framework",
+              "status": "ERROR",
+              "error": "Section generation failed after all retries"
+            },
+            "End": true
+          },
+
+          "AccumulateAfterFailureRetry": {
+            "Type": "Pass",
+            "Comment": "Include section despite validation crash on retry — content was generated successfully",
+            "Parameters": {
+              "section_id.$": "$.section_result.section_id",
+              "section_result.$": "$.section_result",
+              "framework.$": "$.template_config.framework",
+              "status": "INCLUDED_WITH_WARNINGS"
+            },
+            "End": true
+          }
+        }
+      },
+      "Next": "FilterSections"
+    },
+
+    "FilterSections": {
+      "Type": "Task",
+      "Comment": "Filter out EXCLUDED/ERROR sections — Step Functions does not support JSONPath filter expressions",
+      "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-filter-sections",
+      "Parameters": {
+        "sections.$": "$.generated_sections"
+      },
+      "ResultPath": "$.filtered_sections",
+      "Next": "AssembleDocument"
+    },
+
+    "AssembleDocument": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-assembly-doc",
+      "Parameters": {
+        "sections.$": "$.filtered_sections.included",
+        "output_bucket.$": "$.validation.validated_input.output_bucket",
+        "reporting_year.$": "$.validation.validated_input.reporting_year",
+        "bank_id.$": "$.validation.validated_input.bank_id",
+        "framework.$": "$.validation.validated_input.framework",
+        "execution_id.$": "$$.Execution.Id",
+        "generation_timestamp.$": "$$.State.EnteredTime"
+      },
+      "ResultPath": "$.assembly_result",
+      "Next": "NotifyCompletion",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 1,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "ExecutionFailed",
+          "ResultPath": "$.error"
+        }
+      ]
+    },
+
+    "NotifyCompletion": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Parameters": {
+        "TopicArn": "arn:aws:sns:us-east-1:061039769766:ESG-ReportComplete",
+        "Subject": "ESG Report Generation Complete",
+        "Message.$": "States.Format('Report complete: {} sections, {} KB, path: {}', $.assembly_result.sections_assembled, $.assembly_result.file_size_kb, $.assembly_result.s3_path)"
+      },
+      "ResultPath": "$.sns_result",
+      "Next": "Success"
+    },
+
+    "Success": {
+      "Type": "Pass",
+      "Parameters": {
+        "assembly_result.$": "$.assembly_result"
+      },
+      "End": true
+    },
+
+    "ExecutionFailed": {
+      "Type": "Fail",
+      "Cause": "ESG Report generation failed",
+      "Error": "ExecutionError"
+    }
+  }
+}

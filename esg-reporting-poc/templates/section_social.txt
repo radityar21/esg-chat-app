@@ -1,0 +1,141 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-09
+# SECTION: SOCIAL_WORKFORCE
+# TOKEN_COUNT: ~600
+
+## SECTION TEMPLATE: Social (S) — Workforce & Human Capital Disclosures
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (CONDITIONAL BY FRAMEWORK — MANDATORY)
+- IF framework = GRI_305: title = "GRI 401/404/405: Employment, Training & Diversity"
+- IF framework = IFRS_S2: title = "Human Capital — Climate Transition Workforce Implications"
+- IF framework = CSRD_ESRS_E1: title = "ESRS S1: Own Workforce"
+- IF framework = OJK_PSPK: title = "Kinerja Sosial: Tenaga Kerja & Pengembangan SDM"
+- IF framework = MULTI_FRAMEWORK: title = "Social: Workforce & Human Capital Disclosures"
+- DEFAULT: title = "Social: Workforce & Human Capital Disclosures"
+
+### FRAMEWORK-SPECIFIC FRAMING
+- IF framework = GRI_305: Frame disclosures per GRI 401-1, 404-1, 405-1, 406-1. Use GRI disclosure references.
+- IF framework = IFRS_S2: Frame as human capital considerations relevant to climate transition and workforce planning. Connect training/diversity to climate strategy readiness.
+- IF framework = CSRD_ESRS_E1: Frame per ESRS S1 (Own Workforce) requirements. Reference DR S1-6 (diversity), S1-13 (training), S1-14 (health & safety).
+- IF framework = OJK_PSPK: Frame per POJK 51/2017 social pillar. Use Bahasa Indonesia for key terms. Reference Pilar II (Sosial) requirements.
+
+### OBJECTIVE
+Generate a social disclosure section covering workforce composition, employment
+practices, training investment, diversity metrics, and non-discrimination for the
+reporting year. This section addresses GRI 2-7, GRI 401-1, GRI 404-1, GRI 405-1,
+and GRI 406-1 requirements. For CSRD, this maps to ESRS S1 (Own Workforce).
+For OJK PSPK, this covers social metrics disclosure requirements.
+
+### DATA INPUT
+{
+  "reporting_year": {reporting_year},
+  "fte_total": {fte_total},
+  "fte_female_pct": {fte_female_pct},
+  "fte_management_female_pct": {fte_management_female_pct},
+  "new_hire_count": {new_hire_count},
+  "voluntary_turnover_pct": {voluntary_turnover_pct},
+  "training_hours_per_fte": {training_hours_per_fte},
+  "discrimination_cases": {discrimination_cases},
+  "hiring_rate_pct": {hiring_rate_pct},
+  "female_headcount": {female_headcount},
+  "male_headcount": {male_headcount},
+  "prior_year": {
+    "reporting_year": {prior_reporting_year},
+    "fte_total": {prior_fte_total},
+    "fte_female_pct": {prior_fte_female_pct},
+    "fte_management_female_pct": {prior_fte_management_female_pct},
+    "new_hire_count": {prior_new_hire_count},
+    "voluntary_turnover_pct": {prior_voluntary_turnover_pct},
+    "training_hours_per_fte": {prior_training_hours_per_fte},
+    "discrimination_cases": {prior_discrimination_cases},
+    "hiring_rate_pct": {prior_hiring_rate_pct},
+    "female_headcount": {prior_female_headcount},
+    "male_headcount": {prior_male_headcount}
+  },
+  "yoy_changes": {
+    "yoy_headcount_change_pct": {yoy_headcount_change_pct},
+    "yoy_turnover_change_pct": {yoy_turnover_change_pct},
+    "yoy_training_change_pct": {yoy_training_change_pct},
+    "female_pct_change_pp": {female_pct_change_pp},
+    "mgmt_female_pct_change_pp": {mgmt_female_pct_change_pp}
+  }
+}
+
+### RAG CONTEXT
+{rag_context_social}
+
+### REQUIRED ELEMENTS (5 Sub-sections)
+
+#### 1. Workforce Overview (GRI 2-7)
+- Opening paragraph: total headcount (fte_total), gender split (female_headcount, male_headcount)
+- YoY headcount trend (yoy_headcount_change_pct)
+- Table: Workforce Composition
+
+| Metric | {reporting_year} | {prior_reporting_year} | Change |
+|--------|----------|----------|--------|
+| Total FTE | {fte_total} | {prior_fte_total} | {yoy_headcount_change_pct}% |
+| Female Employees | {female_headcount} | {prior_female_headcount} | — |
+| Male Employees | {male_headcount} | {prior_male_headcount} | — |
+| Female Percentage | {fte_female_pct}% | {prior_fte_female_pct}% | {female_pct_change_pp} pp |
+
+#### 2. Employment (GRI 401-1)
+- New hires count and hiring rate
+- Voluntary turnover rate with YoY comparison
+- Table: Employment Indicators
+
+| Metric | {reporting_year} | {prior_reporting_year} | YoY Change |
+|--------|----------|----------|------------|
+| New Hires | {new_hire_count} | {prior_new_hire_count} | — |
+| Hiring Rate | {hiring_rate_pct}% | {prior_hiring_rate_pct}% | — |
+| Voluntary Turnover | {voluntary_turnover_pct}% | {prior_voluntary_turnover_pct}% | {yoy_turnover_change_pct}% |
+
+#### 3. Training & Education (GRI 404-1)
+- Average training hours per FTE with YoY trend
+- Narrative on training investment direction
+- Table: Training Metrics
+
+| Metric | {reporting_year} | {prior_reporting_year} | YoY Change |
+|--------|----------|----------|------------|
+| Avg Training Hours/FTE | {training_hours_per_fte} | {prior_training_hours_per_fte} | {yoy_training_change_pct}% |
+
+#### 4. Diversity & Equal Opportunity (GRI 405-1)
+- Overall female representation percentage
+- Women in management percentage with YoY trend
+- Table: Diversity Indicators
+
+| Metric | {reporting_year} | {prior_reporting_year} | Change |
+|--------|----------|----------|--------|
+| Female Workforce (%) | {fte_female_pct}% | {prior_fte_female_pct}% | {female_pct_change_pp} pp |
+| Women in Management (%) | {fte_management_female_pct}% | {prior_fte_management_female_pct}% | {mgmt_female_pct_change_pp} pp |
+
+#### 5. Non-Discrimination (GRI 406-1)
+- Number of discrimination cases reported
+- Statement on remediation actions (if cases > 0)
+- Prior year comparison
+
+### CONSTRAINTS
+- VAL-NUM-01: ALL numbers in narrative MUST exist verbatim in DATA INPUT. No self-calculation.
+- YoY changes are PRE-COMPUTED. Use values from yoy_changes directly.
+- Percentage-point changes (pp) are NOT the same as percentage changes (%). Use correct unit.
+- If prior_year is null, OMIT all YoY comparisons and prior year columns.
+- If discrimination_cases = 0, state: "No discrimination cases were reported during the reporting period."
+
+### FRAMEWORK-SPECIFIC NOTES
+- GRI_305 (primary): This section satisfies GRI 2-7, 401-1, 404-1, 405-1, 406-1
+- CSRD_ESRS_E1: Maps to ESRS S1 (Own Workforce) — supplementary social disclosure
+- OJK_PSPK: Fulfills social metrics requirements per Pillar II (Social)
+- IFRS_S2: Social metrics provided as supplementary context (IFRS S2 is climate-focused)
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.
+
+### ADVISORY RECOMMENDATION BLOCK (MANDATORY)
+Generate 2-3 specific recommendations referencing peer banks from RAG CONTEXT:
+- **Finding**: [Observation, e.g., "Training hours declined 23% YoY to 49.3 hrs/FTE"]
+- **Benchmark**: [Peer comparison, e.g., "BRI maintains 62.4 hrs/employee; OCBC Indonesia targets minimum 40 hrs"]
+- **Recommendation**: [Specific action, e.g., "Implement blended e-learning + classroom format targeting 55 hrs/FTE"]
+- **Reference**: [Bank name, e.g., "DBS shifted to concise impactful digital modules while maintaining development quality"]
+- **Priority**: [High/Medium/Low]

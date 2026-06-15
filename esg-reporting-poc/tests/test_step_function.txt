@@ -1,0 +1,118 @@
+Cara Test di Step Functions Console
+Step 1: Go to Step Functions → Start Execution
+Paste test input ini:
+
+{
+  "reporting_year": 2024,
+  "bank_id": "GENERIC_FI_001",
+  "framework": "GRI_305",
+  "output_bucket": "esg-output-reports-061039769766",
+  "kb_id": "WVREXI1LEI",
+  "section_templates": [
+    {
+      "template_id": "GRI_305_SCOPE1_2024",
+      "framework": "GRI_305",
+      "section_type": "scope1"
+    }
+  ]
+}
+
+Key: section_templates array cuma punya 1 item (Scope 1). Ini bikin Map state iterate cuma 1x.
+
+Step 2: Monitor di Console
+Lo akan liat flow:
+
+ValidateInput ✅ (harus PASS)
+  → CheckValidation ✅
+    → WaitForGlueJobs (Parallel — 3 Glue jobs)
+      → TriggerAggregation
+        → QueryAthena
+          → GenerateSections (Map — 1 iteration only)
+            → InvokeSectionGen → InvokeValidation → ValidationChoice
+              → AccumulateSection (if PASS/WARN)
+          → FilterSections
+            → AssembleDocument
+              → NotifyCompletion
+                → Success ✅
+Step 3: Verify di CloudWatch
+
+
+{
+  "reporting_year": 2024,
+  "bank_id": "GENERIC_FI_001",
+  "framework": "GRI_305",
+  "output_bucket": "esg-output-reports-061039769766",
+  "kb_id": "WVREXI1LEI",
+  "section_templates": [
+    {
+      "template_id": "GRI_305_SCOPE1_2024",
+      "framework": "GRI_305",
+      "section_type": "scope1"
+    },
+    {
+      "template_id": "GRI_305_SCOPE2_2024",
+      "framework": "GRI_305",
+      "section_type": "scope2"
+    },
+    {
+      "template_id": "GRI_305_SCOPE3_PCAF_2024",
+      "framework": "GRI_305",
+      "section_type": "scope3_pcaf"
+    },
+    {
+      "template_id": "GRI_305_SUMMARY_2024",
+      "framework": "GRI_305",
+      "section_type": "summary"
+    }
+  ]
+}
+
+{
+    "reporting_year": 2024,
+    "framework": "MULTI_FRAMEWORK",
+    "bank_id": "GENERIC_FI_001",
+    "output_bucket": "esg-output-reports-061039769766",
+    "revenue_idr_billion": 92000.0,
+    "kb_id": "WVREXI1LEI",
+    "section_templates": [
+      {"template_id": "scope1", "framework": "GRI_305"},
+      {"template_id": "scope2", "framework": "GRI_305"},
+      {"template_id": "scope3_pcaf", "framework": "GRI_305"},
+      {"template_id": "intensity", "framework": "GRI_305"},
+      {"template_id": "scope1", "framework": "IFRS_S2"},
+      {"template_id": "governance", "framework": "IFRS_S2"},
+      {"template_id": "scope3_pcaf", "framework": "IFRS_S2"},
+      {"template_id": "targets", "framework": "IFRS_S2"},
+      {"template_id": "scope1", "framework": "CSRD_ESRS_E1"},
+      {"template_id": "scope3_pcaf", "framework": "CSRD_ESRS_E1"},
+      {"template_id": "scope1", "framework": "OJK_PSPK"},
+      {"template_id": "scope3_pcaf", "framework": "OJK_PSPK"},
+      {"template_id": "intensity", "framework": "OJK_PSPK"},
+      {"template_id": "summary", "framework": "NONE"}
+    ]
+  }
+
+
+
+How to response human review:
+
+### accept
+
+aws stepfunctions send-task-success \
+--task-token "AQCMAAAAKgAAAAMAAAAAAAAAAQyB5NCIkyeTGLL+PrCrz90sSZQAYs7bQrpF41LX5orTf0YCR5q+CSm476WsVClXvDdGzJYC2s/4YPEj7Q40XptSqXDerbhJeqgUmmyyibngyE9Erlvt6Q==LNtnHR35yod0swWMRamVkxnvbbWtXR5CDwn7b0PHA5YSdstKQ632VXAVB5Xj7ZDaFCacGH7oenAuPg5KXVi4z8x2w1zqDi8U3teFtTnXujEcFe9ylOU10OdDqnsgsjTeybMoXPGKw25HBrmUcSxrqNpksoRifVmeki5u5F3muh/F47aCAUE/OTj+PJUv+Pzfc+Ui1g3YxJQ76m+JRkpG3Q1OinygbQnzBMtkInaZQNT0pxfJf1oO4BktTSselY1SEH8coS8jsmFgtnX2NLWHSMdmreuBAfauDFTQg/2ixQ/VROXZVsVo/trvpwbGg+TR963ArYWc0Arn2cu8ZLXWJv7RItNegpbqID+cNFvjedl+a3Ejgr+5dDY3V5u9EIBnJjfSj7xGIhBsPgMSWI3Q6FgBwanfr0rVfdUlJPPzgFg9N9LFMoz6Z4hsBewbWVyM/PlFjTuaJx4V3ijsRKKGhXYad5+WLo9e+TMk4dlJMPSafH4FiKCvpqf2aoXGCFu/sFB2V644QK3R2kHkR6Xn" \ 
+--task-output "{\"review_decision\": \"APPROVED\"}" --region us-east-1
+
+### harus satu line jadi kaya dibawah ini:
+aws stepfunctions send-task-success --task-token "AQCMAAAAKgAAAAMAAAAAAAAAAdpulaTbB7jMq4QX4aHrI6opzxzO4MFjWXkOLmGCQGW55jNz0fOEyQcvLYXw+PWQ+6ik/hzRz8IJ951XsMNLqpPdDF9nAQOFhLXy0pZHeggxh0+QEI2BCw==dDGUtPw6aA+U147zL5OsZeBh+P/2BdZrTL39w4t8WZ05Q+8NZdT1r8CvO+wc716RajZztOYQGLueAOR7fg3lxEnSpUDnUSUvtZQl+IawYtT878jAlCOEcvylmbuPAInI5v6kSuqoOCpQoytBkzVeuf3b9oTVs19eVjNYNWczHPzWEFDzn9xpsYQfotFuSUjCu3i0rRAZ+dOxnDJ36+w1ffnit+S/rrYlADpM8yHX6mU5C1glzFd2IDr4eGJcx5CFCRNmy
+HB2wCjQpqs8X2ixgo13UPnsmD81IV17ReGfkCmXDEHct854ctIg8X
+GFZwv74gSgfQvCLpZ8Kx2sVrrG39Wrzbv2QhU3ZPKqytJbeBmA757BKXiepaN5cVmd73+3yirWWx4MWgQfXZa3UjtQMZYifdk3kD3uAXiAXCfbxRbzgFyXsOM7byG686Tz17qTmMkqQw9AhhmjFR0OfC9yfjggioO2hUNZyVBoMh5beHUmGlAMJWw4PfUa1OCsMbzpBVCkJr7PwRzZADJ4rwgA" --task-output "{\"review_decision\": \"APPROVED\"}" --region us-east-1
+
+
+### accept but exclude section
+
+aws stepfunctions send-task-failure \
+  --task-token "AQCMAAAAKgAAAAMAAAAAAAAAAQyB5NCIkyeTGLL+PrCrz90sSZQAYs7bQrpF41LX5orTf0YCR5q+CSm476WsVClXvDdGzJYC2s/4YPEj7Q40XptSqXDerbhJeqgUmmyyibngyE9Erlvt6Q==LNtnHR35yod0swWMRamVkxnvbbWtXR5CDwn7b0PHA5YSdstKQ632VXAVB5Xj7ZDaFCacGH7oenAuPg5KXVi4z8x2w1zqDi8U3teFtTnXujEcFe9ylOU10OdDqnsgsjTeybMoXPGKw25HBrmUcSxrqNpksoRifVmeki5u5F3muh/F47aCAUE/OTj+PJUv+Pzfc+Ui1g3YxJQ76m+JRkpG3Q1OinygbQnzBMtkInaZQNT0pxfJf1oO4BktTSselY1SEH8coS8jsmFgtnX2NLWHSMdmreuBAfauDFTQg/2ixQ/VROXZVsVo/trvpwbGg+TR963ArYWc0Arn2cu8ZLXWJv7RItNegpbqID+cNFvjedl+a3Ejgr+5dDY3V5u9EIBnJjfSj7xGIhBsPgMSWI3Q6FgBwanfr0rVfdUlJPPzgFg9N9LFMoz6Z4hsBewbWVyM/PlFjTuaJx4V3ijsRKKGhXYad5+WLo9e+TMk4dlJMPSafH4FiKCvpqf2aoXGCFu/sFB2V644QK3R2kHkR6Xn" \
+  --error "REJECTED" \
+  --cause "Section contains calculated value not in source data" \
+  --region us-east-1
+

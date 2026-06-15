@@ -1,0 +1,146 @@
+## INSIGHT LAYER (MANDATORY — Generate ALL components below)
+## Applies to ALL framework modes (GRI, IFRS, ESRS, OJK, UNIFIED)
+
+### INSIGHT BOX (field: "insight_box")
+Generate a concise insight box:
+- "headline": 1 sentence — the "so what?" (max 15 words). Must reference peer comparison.
+  GOOD: "Scope 1 naik 2.36% sementara peers turun 8-12% — diesel over-reliance is gap driver"
+  BAD: "Emissions have increased year over year"
+- "body": 2-3 sentences — why it matters + implication (max 50 words)
+- "severity": "info" | "warning" | "critical" | "positive"
+  - "positive" = outperforming peers or improving trend
+  - "info" = neutral, stable
+  - "warning" = concerning trend vs peers
+  - "critical" = immediate action needed (regulatory or reputational risk)
+
+### DIAGNOSTIC (field: "diagnostic")
+- "text": 3-4 sentences explaining WHY the numbers are what they are
+- "root_causes": 2-4 bullet points — specific, data-backed causes
+- "risk_implications": 2-3 bullet points — regulatory, reputational, or financial risks
+
+Rules:
+- Connect data to business risk (OJK POJK 51, SEOJK 16, CSRD timeline, investor expectations)
+- Quantify where possible ("gap will widen to Xpp by 2026")
+
+### PRIORITY ACTIONS (field: "priority_actions")
+Generate 2-4 actions:
+- "action": Specific (not "reduce emissions" but "install solar+battery at top 5 diesel sites")
+- "timeline": Quarter + year (e.g., "Q3 2025")
+- "expected_impact": Quantified (tCO₂e reduction or %)
+- "estimated_investment": IDR amount (order of magnitude OK)
+- "peer_reference": Which bank did this + what result
+- "priority": "high" | "medium" | "low"
+
+Rules:
+- If RAG CONTEXT has peer benchmarks: MUST reference specific bank + outcome
+- If RAG CONTEXT empty: use "General Best Practice (SBTi/RE100/TCFD)" in peer_reference
+- NEVER fabricate specific bank numbers without RAG source
+- Order by priority (high first)
+
+### CHARTS (field: "charts")
+Generate 1-3 chart configurations:
+- "chart_id": unique identifier (e.g., "scope1_source_breakdown")
+- "chart_type": "pie" | "bar" | "horizontal_bar" | "stacked_bar" | "line"
+- "title": Chart title
+- "insight_caption": The "so what?" — tells reader what to CONCLUDE, not just describes
+  GOOD: "Diesel dominates at 64.7% — primary lever for reduction via solar+battery"
+  BAD: "This chart shows emission sources"
+- "data": { "labels": [...], "values": [...], "colors": [...] } for pie
+         { "categories": [...], "series": [{"name": "...", "values": [...]}] } for bar
+
+Chart type guidance:
+- PIE: composition/breakdown (scope split, source split, gender split)
+- BAR: comparison/trend (YoY, peer vs actual, current vs target)
+- HORIZONTAL_BAR: ranked lists (top sectors, top facilities)
+
+### KPI HIGHLIGHTS (field: "kpi_highlights")
+Generate 3-4 KPI cards:
+- "label": Short metric name
+- "value": The number (formatted string)
+- "unit": Unit (tCO₂e, %, hrs, etc.)
+- "trend": "up" | "down" | "stable" | "warning"
+- "trend_value": Change indicator (e.g., "+2.36%", "-40.66%", "stable")
+
+Include at least 1 peer comparison metric.
+
+### OUTPUT JSON SCHEMA (Updated with Insight Layer)
+{
+  "section_id": "...",
+  "title": "...",
+  "paragraphs": [...],
+  "tables": [...],
+  "key_metrics": [...],
+  "footnotes": [...],
+  "framework_references": [...],
+  "data_sources_used": [...],
+  "advisory_recommendations": [...],
+  "insight_box": {"headline": "...", "body": "...", "severity": "..."},
+  "diagnostic": {"text": "...", "root_causes": [...], "risk_implications": [...]},
+  "priority_actions": [{"action": "...", "timeline": "...", "expected_impact": "...", "estimated_investment": "...", "peer_reference": "...", "priority": "..."}],
+  "charts": [{"chart_id": "...", "chart_type": "...", "title": "...", "insight_caption": "...", "data": {...}}],
+  "kpi_highlights": [{"label": "...", "value": "...", "unit": "...", "trend": "...", "trend_value": "..."}]
+}
+
+### DATA PROVENANCE (field: included in "footnotes" array — MANDATORY for ALL sections)
+
+At the END of each section, include a data provenance footnote:
+"📋 DATA PROVENANCE: Source: {source_system} | EF: {ef_source} ({ef_year}) | Methodology: {methodology} | Quality: {quality_tier} | Validated: {date} | Owner: Sustainability & ESG Division"
+
+Source values by section:
+- scope1: Source="Facility Management System", EF="IPCC 2006 + DEFRA 2025", Methodology="GHG Protocol Corporate Standard"
+- scope2: Source="PLN Billing / Facility Mgmt", EF="ESDM 2023 (0.7886 kgCO₂/kWh)", Methodology="GHG Protocol Scope 2 Guidance"
+- scope3_pcaf: Source="Core Banking + PCAF DB", EF="PCAF DB 2023", Methodology="PCAF Global Standard Part A (2022)"
+- intensity: Source="Financial statements + GHG inventory", EF="N/A (derived)", Methodology="GHG Protocol / IFRS S2 Para 29(b)"
+- reduction: Source="Derived from Scope 1+2+3 YoY", EF="N/A", Methodology="GHG Protocol"
+- social: Source="HR Information System", EF="N/A", Methodology="GRI 401/403/404/405"
+- governance: Source="Corporate Secretary / Board minutes", EF="N/A", Methodology="IFRS S2 Para 5-9 + ESRS 2 GOV"
+- targets: Source="Strategic planning docs + Board resolutions", EF="N/A", Methodology="SBTi Protocol v5"
+
+### GAP REPORTING FORMAT (MANDATORY — applies to ALL sections)
+
+When data is NOT available or a framework requirement is NOT met, you MUST format it as:
+
+"❌ GAP: [What's missing — plain language, max 1 sentence]
+Required by: [Framework + specific paragraph/article reference]
+Peer benchmark: [Which peer has this + since when, from RAG context]
+Business risk: [Consequence of non-compliance — regulatory, rating, reputational]
+Timeline: FY{reporting_year + 1} [or specific quarter if known]"
+
+SEVERITY LEVELS for gaps:
+- ❌ CRITICAL GAP: Framework requirement NOT met + regulatory exposure
+- ⚠️ PARTIAL: Some elements present but incomplete
+- ✅ COMPLIANT: Fully meets framework requirement
+
+Rules:
+- NEVER just say "Not Established" or "N/A" — always explain WHAT is missing and WHY it matters
+- ALWAYS include peer comparison (which bank has this, since when)
+- ALWAYS include timeline for remediation
+- ALWAYS connect to business risk (not just compliance checkbox)
+- Gaps MUST appear in the section where they are relevant (not only in appendix)
+- If multiple frameworks require the same element, list ALL applicable references
+
+### PCAF DATA QUALITY IMPROVEMENT ROADMAP (for scope3_pcaf section ONLY)
+
+After the standard PCAF narrative, include a sub-section:
+"### PCAF Data Quality Improvement Roadmap"
+
+Generate a table:
+| Year | Target Score | Key Actions | Expected Impact |
+|------|-------------|-------------|-----------------|
+| FY{current} (Actual) | {actual_score} | Baseline | — |
+| FY{current+1} | {score - 0.15} | Move Score 5→4 borrowers (request revenue data) | -{0.15} |
+| FY{current+2} | {score - 0.35} | Move Score 4→3 (physical activity data from top 20) | -{0.20} |
+| FY{current+3} | <3.0 | CDP integration + verified inventories | -{0.15} |
+
+Include confidence gap projection:
+"Current gross-weighted gap: {gap}%. At target score <3.0, projected gap: <15%."
+
+### NDC ALIGNMENT (for targets section ONLY)
+
+Include sub-section "### Alignment with Indonesia's NDC":
+- Indonesia NDC (2022): Unconditional -31.89% vs BAU by 2030, Conditional -43.2%
+- Long-term: NZE by 2060 or sooner
+- Calculate required annual rate: if 30% reduction by 2030 from {reporting_year} base = ~5.8%/year
+- Compare against current trajectory ({yoy_change_pct}%)
+- Reference: Presidential Regulation No. 98/2021 (Nilai Ekonomi Karbon)
+- State gap: "Closing this gap requires {X}x acceleration from current trajectory."

@@ -1,0 +1,6 @@
+# Section Template: Methodology & Assumptions
+# =============================================================================
+# Template for generating methodology disclosure section.
+# =============================================================================
+
+# TODO: Implement (D9)

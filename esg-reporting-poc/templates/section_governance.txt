@@ -1,0 +1,96 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-05
+# SECTION: GOVERNANCE
+# TOKEN_COUNT: ~450
+
+## SECTION TEMPLATE: Climate Governance
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (MANDATORY — DO NOT MODIFY)
+title: "Climate Governance & ESG Oversight"
+
+### OBJECTIVE
+Generate a disclosure section describing the governance structures, processes, and
+oversight mechanisms for climate-related risks and opportunities. This section
+demonstrates board and management accountability for climate strategy.
+
+### DATA INPUT
+{
+  "board_committee_name": "{board_committee_name}",
+  "board_oversight_frequency": "{board_oversight_frequency}",
+  "climate_expertise_present": {climate_expertise_present},
+  "management_committee_name": "{management_committee_name}",
+  "risk_committee_integration": {risk_committee_integration},
+  "executive_remuneration_linked": {executive_remuneration_linked},
+  "remuneration_climate_pct": {remuneration_climate_pct},
+  "target_setting_authority": "{target_setting_authority}",
+  "target_monitoring_frequency": "{target_monitoring_frequency}"
+}
+
+### RAG CONTEXT
+{rag_context_governance}
+
+### REQUIRED ELEMENTS
+1. Board oversight paragraph:
+   - Name of board committee responsible (e.g., Risk & Sustainability Committee)
+   - Frequency of climate risk review (quarterly, semi-annual)
+   - How climate considerations inform strategy and major transactions
+2. Board competency statement:
+   - Whether board members have climate expertise or training
+   - How skills are assessed and developed
+3. Management role paragraph:
+   - Management-level position/committee responsible (e.g., Chief Risk Officer)
+   - Reporting lines and escalation process
+   - Integration with enterprise risk management
+4. Target oversight:
+   - Who sets climate targets (board vs management)
+   - How progress is monitored and reported
+5. Remuneration linkage (MANDATORY if executive_remuneration_linked = TRUE):
+   - Percentage of executive compensation tied to climate metrics
+   - Which metrics are used (e.g., emissions reduction, renewable energy %)
+6. Governance structure diagram (OPTIONAL but recommended):
+   - Visual representation of board → management → operational oversight
+
+### FRAMEWORK-SPECIFIC NOTES
+- GRI 2-12 / 2-13: Requires role of highest governance body in sustainability oversight
+- IFRS S2 Para 5-7: Requires governance body identification + management role description
+- CSRD ESRS 2 GOV-3: Requires integration of sustainability performance in incentive schemes
+- OJK PSPK: Requires board-level sustainability committee for listed financial institutions
+
+### CRITICAL CONSTRAINT
+If executive_remuneration_linked = TRUE, remuneration_climate_pct MUST be disclosed.
+If remuneration_climate_pct = 0 or NULL, state "not currently linked" explicitly.
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.
+
+### CONDITIONAL DISCLOSURE LOGIC
+IF all required governance data fields are populated in DATA INPUT:
+  → Generate FULL disclosure per REQUIRED ELEMENTS above
+
+IF some fields are NULL/empty/"{placeholder}":
+  → Generate PARTIAL disclosure:
+    1. Present available data with full formatting
+    2. Add "Disclosure Gap Analysis" table:
+       | Requirement | Standard Reference | Status | Priority |
+       e.g. | Board ESG committee | IFRS S2 Para 6(a) | Not Available | High |
+    3. Add "Recommendations for Full Compliance" (see Advisory block below)
+    4. State: "Target: Full disclosure by next reporting period"
+
+IF ALL governance data fields are NULL/placeholder:
+  → Generate GAP ANALYSIS section:
+    1. State each IFRS S2/GRI governance requirement (what SHOULD be disclosed)
+    2. For each: cite paragraph reference, describe what's needed, mark status "not available"
+    3. Provide peer comparison from RAG CONTEXT — how BRI, BCA, DBS structure their governance
+    4. Generate specific recommendations to build governance data infrastructure
+    5. Priority matrix: quick wins (e.g., board committee creation) vs structural changes
+
+### ADVISORY RECOMMENDATION BLOCK (MANDATORY)
+Generate 2-3 specific recommendations referencing peer banks from RAG CONTEXT:
+- **Finding**: [e.g., "No board-level ESG committee identified; no executive remuneration linkage"]
+- **Benchmark**: [e.g., "BRI established ESG Committee in 2021 (NOKEP 872-DIR); DBS links 20% of executive compensation to climate KPIs"]
+- **Recommendation**: [e.g., "Establish Board-level Sustainability Committee with quarterly review cadence and link 10-15% of BoD remuneration to ESG metrics"]
+- **Reference**: [e.g., "BRI model: Risk Mgmt & ESG Committee since 2021, reports to President Director"]
+- **Priority**: [High — governance foundation for all other ESG disclosures]

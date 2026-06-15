@@ -1,0 +1,21 @@
+{
+  "section_id": "scope1",
+  "framework": "GRI_305",
+  "reporting_year": 2024,
+  "metrics_json": {
+    "ghg_summary": {
+      "scope1_tco2e": 3402.997,
+      "scope1_natgas_tco2e": 1199.7924,
+      "scope1_diesel_tco2e": 2203.2044,
+      "scope2_location_tco2e": 44613.876,
+      "yoy_change_pct": -4.07
+    },
+    "prior_year_summary": {
+      "scope1_tco2e": 3324.521
+    },
+    "reporting_year": 2024,
+    "bank_id": "GENERIC_FI_001"
+  },
+  "kb_id": "WVREXI1LEI",
+  "execution_id": "test-local-001"
+}

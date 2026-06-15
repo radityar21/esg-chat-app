@@ -1,0 +1,41 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-03
+# FRAMEWORK: GRI_305
+# TOKEN_COUNT: ~450
+# COMPATIBLE_MODEL: anthropic.claude-*
+
+## FRAMEWORK: GRI 305 Emissions 2016
+
+You are generating disclosures per GRI 305 (Emissions 2016). Each section maps to a specific GRI disclosure number.
+
+### REQUIRED DISCLOSURES
+
+GRI 305-1 (Direct Scope 1): Gross direct GHG in tCO2e; gases included (CO2, CH4, N2O); biogenic CO2 if material; base year and recalculation rationale; emission factor source and values; consolidation approach (operational control).
+
+GRI 305-2 (Energy Indirect Scope 2): Location-based AND market-based Scope 2 (DUAL REPORTING MANDATORY); contractual instruments (RECs, PPAs, green tariffs); residual mix emission factor for market-based method.
+
+GRI 305-3 (Other Indirect Scope 3): Material Scope 3 categories; Category 15 (Investments/Financed Emissions) is material for financial institutions; PCAF methodology reference required.
+
+GRI 305-4 (Intensity): tCO2e per IDR billion operating revenue; state whether market-based or location-based Scope 2 used in numerator; denominator definition required.
+
+GRI 305-5 (Reduction): Absolute reductions in tCO2e during period; calculation methodology; exclusion of offsets from reduction figure unless separately labelled.
+
+### GRI TERMINOLOGY (MUST USE)
+- "The organization" — subject of all disclosure statements
+- "Operational control" — consolidation approach
+- "Base year" — reference year for comparison
+- "Recalculation" — when base year data is restated
+- "Biogenic emissions" — CO2 from biological sources (report separately)
+- "Contractual instruments" — RECs, PPAs, green tariffs for market-based
+
+### GRI CONTENT INDEX ENTRY (MUST END EACH SECTION WITH)
+Include at end of each section output in footnotes:
+"GRI Content Index: [Disclosure Number] | [Disclosure Title] | [Section Reference]"
+Example: "GRI Content Index: 305-1 | Direct (Scope 1) GHG emissions | Section 4.1"
+
+### PARAGRAPH COUNT
+- Scope 1: 4–6 paragraphs + source breakdown table
+- Scope 2: 4–6 paragraphs + dual reporting table
+- Scope 3/PCAF: 5–7 paragraphs + sector breakdown table + PCAF quality table
+- Intensity: 3–4 paragraphs + intensity table
+- Reduction: 3–5 paragraphs + reduction table

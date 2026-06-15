@@ -1,0 +1,78 @@
+# VERSION: 2.0.0
+# LAST_MODIFIED: 2026-06-10
+# SECTION: REDUCTION_UNIFIED
+# MODE: MULTI_FRAMEWORK
+
+## SECTION TITLE (MANDATORY)
+title: "1.5 Emission Reduction Initiatives & Targets"
+
+## FRAMEWORKS ADDRESSED
+- GRI 305-5 — Reduction of GHG emissions
+- IFRS S2 Paragraph 33-36 — Climate-related targets and transition planning
+- ESRS E1-4 DR E1-4 — GHG emission reduction targets & decarbonization levers
+- OJK PSPK — Target Pengurangan Emisi GRK
+
+## DATA INPUT
+Uses metrics from ghg_summary:
+- scope1_tco2e, prior_year_scope1_tco2e, yoy_change_pct
+- scope2_location_tco2e, prior_year_scope2_location
+- vs_base_year_change_pct (if available)
+
+## CONDITIONAL DISCLOSURE LOGIC
+
+IF yoy_change values are available AND base_year data exists:
+  → Generate FULL reduction disclosure:
+    - YoY changes per scope
+    - vs Base year comparison
+    - Attribution: initiatives vs organic change
+    - Reduction initiative inventory from RAG benchmarks
+
+IF yoy_change available BUT no formal reduction targets in DATA INPUT:
+  → Generate PARTIAL disclosure + GAP ANALYSIS:
+    - Report observed changes (increase or decrease)
+    - Acknowledge: "structured reduction program not yet formalized"
+    - Provide peer benchmarks (BRI EV fleet, DBS RE100, BCA green building)
+    - Recommend specific reduction initiatives
+
+IF ALL reduction data is NULL:
+  → Generate FULL GAP ANALYSIS:
+    - State GRI 305-5 + IFRS S2 Para 33 requirements
+    - Peer comparison: what other banks have achieved
+    - Roadmap to establish reduction tracking
+    - Priority matrix
+
+## REQUIRED ELEMENTS
+
+### 1. Opening Paragraph
+- Overall emissions trajectory (increasing/decreasing)
+- Total change vs prior year (absolute + percentage)
+
+### 2. Scope-by-Scope Change Table
+| Scope | Current (tCO₂e) | Prior Year (tCO₂e) | Change (%) | Direction |
+| Scope 1 | ... | ... | ... | ↑/↓ |
+| Scope 2 | ... | ... | ... | ↑/↓ |
+
+### 3. Reduction Initiatives (from RAG peer benchmarks)
+- Short-term: LED retrofit, auto-shutdown, energy audit
+- Medium-term: Solar panels, green building certification, EV fleet
+- Long-term: RE100 commitment, PPA, internal carbon price
+- Each with expected impact and peer reference
+
+### 4. Framework Cross-Reference Table (MANDATORY)
+| Framework | Disclosure Ref | Requirement | Status |
+|-----------|---------------|-------------|--------|
+| GRI 305-5 | 305-5a | GHG reductions achieved (tCO₂e) | ⚠️ Partial |
+| GRI 305-5 | 305-5b | Gases included in reductions | ⚠️ Partial |
+| GRI 305-5 | 305-5d | Base year / base data | ✅ Disclosed |
+| IFRS S2 | Para 33-36 | Targets, transition plan | ⚠️ Gap Analysis |
+| ESRS E1 | DR E1-4 | Decarbonization levers | ⚠️ Gap Analysis |
+| OJK PSPK | Target Pengurangan | Target emisi per SFAP | ⚠️ Gap Analysis |
+
+### 5. Advisory Recommendations (MANDATORY)
+High priority — reduction is regulatory trajectory. Recommendations must include:
+- Specific programs from peer banks (BRI Green Network, DBS RE100, BCA exclusion list)
+- Numeric targets based on peer achievements
+- Timeline for implementation
+
+## OUTPUT FORMAT
+Return JSON per system_base.txt. Include "framework_cross_reference" field.

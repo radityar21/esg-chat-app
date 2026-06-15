@@ -1,0 +1,86 @@
+# VERSION: 2.0.0
+# LAST_MODIFIED: 2026-06-10
+# SECTION: SOCIAL_UNIFIED
+# MODE: MULTI_FRAMEWORK
+
+## SECTION TITLE (MANDATORY)
+title: "2.1 Workforce & Human Capital"
+
+## FRAMEWORKS ADDRESSED
+- GRI 2-7 — Employees (headcount, gender)
+- GRI 401-1 — New employee hires and turnover
+- GRI 404-1 — Average hours of training per year
+- GRI 405-1 — Diversity of governance bodies and employees
+- GRI 406-1 — Incidents of discrimination
+- ESRS S1 — Own Workforce (supplementary)
+- OJK PSPK — Kinerja Sosial: Tenaga Kerja
+
+## DATA INPUT
+{
+  "hr_metrics": {
+    "fte_total", "fte_female_pct", "fte_management_female_pct",
+    "new_hire_count", "voluntary_turnover_pct", "training_hours_per_fte",
+    "discrimination_cases", "hiring_rate_pct", "female_headcount", "male_headcount",
+    "prior_year": {...},
+    "yoy_changes": {
+      "yoy_headcount_change_pct", "yoy_turnover_change_pct",
+      "yoy_training_change_pct", "female_pct_change_pp", "mgmt_female_pct_change_pp"
+    }
+  }
+}
+
+## REQUIRED ELEMENTS (5 Sub-sections)
+
+### 1. Workforce Overview (GRI 2-7)
+- Total headcount, gender split (female/male)
+- YoY headcount trend
+- Table: Workforce Composition (current + prior year + change)
+
+### 2. Employment (GRI 401-1)
+- New hires count and hiring rate
+- Voluntary turnover rate with YoY comparison
+- Table: Employment Indicators
+
+### 3. Training & Education (GRI 404-1)
+- Average training hours per FTE
+- YoY trend (improvement/decline)
+- Table: Training Metrics
+
+### 4. Diversity & Equal Opportunity (GRI 405-1)
+- Overall female representation %
+- Women in management %
+- YoY trend (percentage point change)
+- Table: Diversity Indicators
+
+### 5. Non-Discrimination (GRI 406-1)
+- Discrimination cases reported
+- Remediation statement (if cases > 0)
+- If cases = 0: "No discrimination cases reported during the period"
+
+### 6. Framework Cross-Reference Table (MANDATORY)
+| Framework | Disclosure Ref | Requirement | Status |
+|-----------|---------------|-------------|--------|
+| GRI 2-7 | 2-7a | Total employees by gender | ✅ Disclosed |
+| GRI 401-1 | 401-1a | New hires by gender | ✅ Disclosed |
+| GRI 401-1 | 401-1b | Employee turnover | ✅ Disclosed |
+| GRI 404-1 | 404-1a | Average training hours | ✅ Disclosed |
+| GRI 405-1 | 405-1a | Diversity of employees | ✅ Disclosed |
+| GRI 405-1 | 405-1b | Gender ratio in management | ✅ Disclosed |
+| GRI 406-1 | 406-1a | Discrimination incidents | ✅ Disclosed |
+| ESRS S1 | Own Workforce | Workforce composition | ✅ Disclosed |
+| OJK PSPK | Kinerja Sosial | Tenaga kerja & kesetaraan | ✅ Disclosed |
+
+### 7. Advisory Recommendations (MANDATORY)
+2-3 recommendations referencing peers:
+- Training: BRI 62.4 hrs, OCBC 62.6 hrs, DBS concise modules approach
+- Diversity: BCA 61.6% female management, DBS gender-diverse panels
+- Turnover: BCA retention strategy (remuneration + career dev)
+
+## CONSTRAINTS
+- VAL-NUM-01: All numbers from DATA INPUT only
+- YoY changes PRE-COMPUTED — use as-is
+- pp (percentage-point) ≠ % (percentage) — use correct unit
+- If prior_year NULL: OMIT all YoY comparisons
+
+## OUTPUT FORMAT
+Return JSON per system_base.txt. Include "framework_cross_reference" field.

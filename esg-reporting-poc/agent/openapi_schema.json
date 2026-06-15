@@ -1,0 +1,172 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ESG Report Actions",
+    "version": "1.0.0",
+    "description": "Tools for generating ESG sustainability reports"
+  },
+  "paths": {
+    "/generate_report": {
+      "post": {
+        "operationId": "generate_report",
+        "summary": "Generate an ESG sustainability report for a specific year and framework",
+        "description": "Triggers the full report generation pipeline (ETL + AI generation + assembly). Takes 3-12 minutes depending on framework.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["reporting_year", "framework"],
+                "properties": {
+                  "reporting_year": {
+                    "type": "integer",
+                    "description": "The reporting year. Only 2023 and 2024 have data.",
+                    "enum": [2023, 2024]
+                  },
+                  "framework": {
+                    "type": "string",
+                    "description": "ESG reporting framework to use",
+                    "enum": ["GRI_305", "IFRS_S2", "CSRD_ESRS_E1", "OJK_PSPK", "MULTI_FRAMEWORK"]
+                  },
+                  "revenue_idr_billion": {
+                    "type": "number",
+                    "description": "Annual revenue in IDR billions. Default: 92000 (= IDR 92 Trillion). Used for emission intensity calculation.",
+                    "default": 92000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Report generation started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string",
+                      "description": "Status message with execution details"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/check_status": {
+      "post": {
+        "operationId": "check_status",
+        "summary": "Check the status of a report generation execution",
+        "description": "Returns current status (RUNNING, SUCCEEDED, FAILED) and details of the execution.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["execution_arn"],
+                "properties": {
+                  "execution_arn": {
+                    "type": "string",
+                    "description": "The execution ARN or short execution ID returned by generate_report"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Execution status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string",
+                      "description": "Status details"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/download_report": {
+      "post": {
+        "operationId": "download_report",
+        "summary": "Get a download link for a completed report",
+        "description": "Generates a presigned S3 URL (valid for 1 hour) for the generated DOCX report.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["execution_arn"],
+                "properties": {
+                  "execution_arn": {
+                    "type": "string",
+                    "description": "The execution ARN or short execution ID"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Download URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string",
+                      "description": "Presigned download URL"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/list_available_data": {
+      "get": {
+        "operationId": "list_available_data",
+        "summary": "List available reporting years and frameworks",
+        "description": "Returns which years have data and which frameworks are supported.",
+        "responses": {
+          "200": {
+            "description": "Available data info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string",
+                      "description": "Available years and frameworks"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

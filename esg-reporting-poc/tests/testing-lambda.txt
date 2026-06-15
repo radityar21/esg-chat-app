@@ -1,0 +1,624 @@
+lambda 1: validateinput fn
+
+// ============================================================
+// TEST 1: Happy path — should return status: "PASS"
+// ============================================================
+{
+  "reporting_year": 2024,
+  "framework": "GRI_305",
+  "bank_id": "GENERIC_FI_001",
+  "output_bucket": "esg-output-reports-061039769766",
+  "revenue_idr_billion": 92000.0,
+  "kb_id": "WVREXI1LEI",
+  "section_templates": [
+    {"template_id": "scope1", "framework": "GRI_305"},
+    {"template_id": "scope2", "framework": "GRI_305"},
+    {"template_id": "scope3_pcaf", "framework": "GRI_305"},
+    {"template_id": "intensity", "framework": "GRI_305"}
+  ]
+}
+
+// ============================================================
+// TEST 2: Invalid framework — should return FAIL
+// ============================================================
+{
+  "reporting_year": 2024,
+  "framework": "INVALID_FRAMEWORK",
+  "bank_id": "GENERIC_FI_001",
+  "output_bucket": "esg-output-reports-061039769766"
+}
+
+// ============================================================
+// TEST 3: Missing required field — should return FAIL
+// ============================================================
+{
+  "reporting_year": 2024,
+  "framework": "GRI_305",
+  "output_bucket": "esg-output-reports-061039769766"
+}
+
+// ============================================================
+// TEST 4: Invalid bank_id format — should return FAIL
+// ============================================================
+{
+  "reporting_year": 2024,
+  "framework": "GRI_305",
+  "bank_id": "invalid-format",
+  "output_bucket": "esg-output-reports-061039769766"
+}
+
+// ============================================================
+// TEST 5: Year out of range — should return FAIL
+// ============================================================
+{
+  "reporting_year": 2019,
+  "framework": "GRI_305",
+  "bank_id": "GENERIC_FI_001",
+  "output_bucket": "esg-output-reports-061039769766"
+}
+
+// ============================================================
+// TEST 6: Non-existent bucket — should return FAIL
+// ============================================================
+{
+  "reporting_year": 2024,
+  "framework": "GRI_305",
+  "bank_id": "GENERIC_FI_001",
+  "output_bucket": "this-bucket-does-not-exist-xyz"
+}
+
+// ============================================================
+// TEST 7: MULTI_FRAMEWORK auto-populate — should PASS + 14 sections
+// ============================================================
+{
+  "reporting_year": 2024,
+  "framework": "MULTI_FRAMEWORK",
+  "bank_id": "GENERIC_FI_001",
+  "output_bucket": "esg-output-reports-061039769766",
+  "revenue_idr_billion": 92000.0,
+  "kb_id": "WVREXI1LEI"
+}
+
+// ============================================================
+// TEST 8: Duplicate templates — should return FAIL
+// ============================================================
+{
+  "reporting_year": 2024,
+  "framework": "GRI_305",
+  "bank_id": "GENERIC_FI_001",
+  "output_bucket": "esg-output-reports-061039769766",
+  "section_templates": [
+    {"template_id": "scope1", "framework": "GRI_305"},
+    {"template_id": "scope1", "framework": "GRI_305"}
+  ]
+}
+
+// ============================================================
+// TEST 9: Intensity without revenue — should FAIL
+// ============================================================
+{
+  "reporting_year": 2024,
+  "framework": "GRI_305",
+  "bank_id": "GENERIC_FI_001",
+  "output_bucket": "esg-output-reports-061039769766",
+  "revenue_idr_billion": 0,
+  "section_templates": [
+    {"template_id": "intensity", "framework": "GRI_305"}
+  ]
+}
+
+| Test | Expected Status | Key Check |
+|------|----------------|-----------|
+| 1 | PASS | `s3_files_verified` = 4, `section_count` = 4 |
+| 2 | FAIL | Error: InvalidFramework |
+| 3 | FAIL | Error: InputValidationError (bank_id missing) |
+| 4 | FAIL | Error: InvalidBankIdFormat |
+| 5 | FAIL | Error: InvalidYearRange |
+| 6 | FAIL | Error: BucketNotFound |
+| 7 | PASS | `section_count` = 14, auto-populated |
+| 8 | FAIL | Error: DuplicateTemplate |
+| 9 | FAIL | Error: MissingRevenueData |
+
+lambda 2: athena query
+
+// ============================================================
+// TEST 1: Happy path — full data retrieval for 2024
+// ============================================================
+{
+  "reporting_year": 2024,
+  "bank_id": "GENERIC_FI_001",
+  "execution_id": "test-execution-001"
+}
+
+// ============================================================
+// TEST 2: Prior year only (2023) — verify prior_year_summary
+// ============================================================
+{
+  "reporting_year": 2023,
+  "bank_id": "GENERIC_FI_001",
+  "execution_id": "test-execution-002"
+}
+
+// ============================================================
+// TEST 3: Non-existent year — should return empty results
+// ============================================================
+{
+  "reporting_year": 2020,
+  "bank_id": "GENERIC_FI_001",
+  "execution_id": "test-execution-003"
+}
+
+
+| Test | Verify |
+|------|--------|
+| 1 | `ghg_summary` has scope1/2/3 values, `pcaf_sectors` has ≤10 rows sorted DESC, `prior_year_summary` has 2023 data |
+| 2 | `ghg_summary` has 2023 data, `prior_year_summary` has 2022 (empty if none) |
+| 3 | `ghg_summary` = `{}`, `pcaf_sectors` = `[]` (no data, no error) |
+
+post test validation:
+
+-- Run this in Athena and compare with Lambda output
+SELECT * FROM esg_aggregated.ghg_summary_annual WHERE reporting_year = 2024;
+SELECT * FROM esg_aggregated.pcaf_by_sector WHERE reporting_year = 2024 ORDER BY financed_emissions_gross_tco2e DESC LIMIT 10;
+
+Lambda #3: SectionGenFn — Test Cases
+
+
+// ============================================================
+// TEST 1: Scope 1 GRI 305 — full happy path
+// ============================================================
+{
+  "section_id": "scope1",
+  "framework": "GRI_305",
+  "reporting_year": 2024,
+  "metrics_json": {
+    "scope1_tco2e": 245.67,
+    "scope1_natgas_tco2e": 189.23,
+    "scope1_diesel_tco2e": 56.44,
+    "yoy_change_pct": -5.2,
+    "intensity_tco2e_per_idr_bn": 0.002671
+  },
+  "kb_id": "WVREXI1LEI",
+  "execution_id": "test-sectiongen-001"
+}
+
+// ============================================================
+// TEST 2: Scope 3 PCAF — tests heavy RAG usage (700 token cap)
+// ============================================================
+{
+  "section_id": "scope3_pcaf",
+  "framework": "GRI_305",
+  "reporting_year": 2024,
+  "metrics_json": {
+    "scope3_cat15_gross_tco2e": 892456.78,
+    "scope3_cat15_weighted_tco2e": 714532.11,
+    "portfolio_weighted_pcaf_score": 3.43,
+    "data_quality_coverage_pct": 72.5,
+    "pcaf_sectors": [
+      {"sector": "energy_oil_gas", "gross": 456789.12, "weighted": 365431.30},
+      {"sector": "manufacturing_heavy", "gross": 234567.89, "weighted": 187654.31}
+    ]
+  },
+  "kb_id": "WVREXI1LEI",
+  "execution_id": "test-sectiongen-002"
+}
+
+// ============================================================
+// TEST 3: Summary — NO RAG (token cap = 0)
+// ============================================================
+{
+  "section_id": "summary",
+  "framework": "NONE",
+  "reporting_year": 2024,
+  "metrics_json": {
+    "scope1_tco2e": 245.67,
+    "scope2_location_tco2e": 1890.45,
+    "scope3_cat15_gross_tco2e": 892456.78,
+    "total_tco2e": 894592.90,
+    "yoy_change_pct": -3.1
+  },
+  "kb_id": "WVREXI1LEI",
+  "execution_id": "test-sectiongen-003"
+}
+
+// ============================================================
+// TEST 4: Invalid section_id — should raise ValueError
+// ============================================================
+{
+  "section_id": "nonexistent_section",
+  "framework": "GRI_305",
+  "reporting_year": 2024,
+  "metrics_json": {},
+  "kb_id": "WVREXI1LEI",
+  "execution_id": "test-sectiongen-004"
+}
+
+// ============================================================
+// TEST 5: No KB (kb_id = null) — should gracefully skip RAG
+// ============================================================
+{
+  "section_id": "scope1",
+  "framework": "GRI_305",
+  "reporting_year": 2024,
+  "metrics_json": {
+    "scope1_tco2e": 245.67,
+    "scope1_natgas_tco2e": 189.23,
+    "scope1_diesel_tco2e": 56.44
+  },
+  "kb_id": null,
+  "execution_id": "test-sectiongen-005"
+}
+
+Expected
+| Test | Verify |
+|------|--------|
+| 1 | `content_json` has valid JSON with: title, paragraphs, tables, key_metrics, footnotes, framework_references. Numbers in output MUST match metrics_json |
+| 2 | `rag_metadata.results_used` > 0, token usage > Test 1 (more RAG context) |
+| 3 | `rag_metadata.results_used` = 0 (skipped). Output still valid JSON |
+| 4 | Error response with `ValueError` or error message |
+| 5 | `rag_metadata.skipped_reason` = "no_rag_for_section". Output still valid |
+
+Quality check for Test 1 output:
+
+❓ Does content_json.title contain "GRI 305-1"?
+❓ Do numbers in paragraphs match metrics_json exactly?
+❓ Is there a table with emissions breakdown?
+❓ Are framework_references populated?
+❓ Is metadata.data_input_hash present?
+
+Lambda #4: ValidationFn — Test Cases
+
+// ============================================================
+// TEST 1: Perfect section — should PASS
+// ============================================================
+{
+  "section_content": {
+    "section_id": "GRI_305_SCOPE1_2024",
+    "title": "GRI 305-1: Direct (Scope 1) GHG Emissions",
+    "paragraphs": [
+      {
+        "paragraph_type": "narrative",
+        "text": "Total direct GHG emissions for the reporting period amounted to 245.67 tCO2e, representing a decrease of 5.2% compared to the prior year. Natural gas combustion contributed 189.23 tCO2e while diesel consumption accounted for 56.44 tCO2e."
+      },
+      {
+        "paragraph_type": "methodology",
+        "text": "Emissions are calculated using the GHG Protocol operational control consolidation approach with emission factors from DEFRA 2025 and IPCC AR6 GWP values."
+      }
+    ],
+    "tables": [
+      {
+        "caption": "Scope 1 Emissions by Source",
+        "headers": ["Source", "Emissions (tCO2e)", "Share (%)"],
+        "rows": [
+          ["Natural Gas", "189.23", "77.0"],
+          ["Diesel", "56.44", "23.0"],
+          ["Total", "245.67", "100.0"]
+        ]
+      }
+    ],
+    "key_metrics": [
+      {"metric": "scope1_total", "value": 245.67, "unit": "tCO2e"},
+      {"metric": "yoy_change", "value": -5.2, "unit": "%"}
+    ],
+    "footnotes": ["GWP values: CH4 = 29.8, N2O = 273.0 (IPCC AR6)"],
+    "framework_references": ["GRI 305-1a", "GRI 305-1b", "GRI 305-1d"],
+    "data_sources_used": ["esg_aggregated.ghg_summary_annual"]
+  },
+  "source_metrics": {
+    "scope1_tco2e": 245.67,
+    "scope1_natgas_tco2e": 189.23,
+    "scope1_diesel_tco2e": 56.44,
+    "yoy_change_pct": -5.2,
+    "intensity_tco2e_per_idr_bn": 0.002671
+  },
+  "framework": "GRI_305",
+  "section_id": "GRI_305_SCOPE1_2024",
+  "execution_id": "test-val-001",
+  "retry_count": 0
+}
+
+// ============================================================
+// TEST 2: Fabricated number — should FAIL (or RETRY if first attempt)
+// ============================================================
+{
+  "section_content": {
+    "section_id": "GRI_305_SCOPE1_2024",
+    "title": "GRI 305-1: Direct (Scope 1) GHG Emissions",
+    "paragraphs": [
+      {
+        "paragraph_type": "narrative",
+        "text": "Total emissions reached 999.99 tCO2e, a significant increase of 15.3% year-over-year."
+      }
+    ],
+    "tables": [
+      {
+        "caption": "Emissions",
+        "headers": ["Metric", "Value"],
+        "rows": [["Total", "999.99"]]
+      }
+    ],
+    "key_metrics": [{"metric": "total", "value": 999.99, "unit": "tCO2e"}],
+    "footnotes": [],
+    "framework_references": ["GRI 305-1a"],
+    "data_sources_used": ["esg_aggregated.ghg_summary_annual"]
+  },
+  "source_metrics": {
+    "scope1_tco2e": 245.67,
+    "scope1_natgas_tco2e": 189.23,
+    "scope1_diesel_tco2e": 56.44,
+    "yoy_change_pct": -5.2
+  },
+  "framework": "GRI_305",
+  "section_id": "GRI_305_SCOPE1_2024",
+  "execution_id": "test-val-002",
+  "retry_count": 0
+}
+
+// ============================================================
+// TEST 3: First person + marketing — should FAIL (VAL-PRH-04, 05)
+// ============================================================
+{
+  "section_content": {
+    "section_id": "GRI_305_SCOPE1_2024",
+    "title": "GRI 305-1: Direct (Scope 1) GHG Emissions",
+    "paragraphs": [
+      {
+        "paragraph_type": "narrative",
+        "text": "We are proud to report our industry-leading emissions of 245.67 tCO2e. Our groundbreaking approach reduced emissions by 5.2% year-over-year."
+      }
+    ],
+    "tables": [
+      {
+        "caption": "Emissions",
+        "headers": ["Source", "Value (tCO2e)"],
+        "rows": [["Total", "245.67"]]
+      }
+    ],
+    "key_metrics": [{"metric": "total", "value": 245.67, "unit": "tCO2e"}],
+    "footnotes": [],
+    "framework_references": ["GRI 305-1a"],
+    "data_sources_used": ["esg_aggregated.ghg_summary_annual"]
+  },
+  "source_metrics": {
+    "scope1_tco2e": 245.67,
+    "yoy_change_pct": -5.2
+  },
+  "framework": "GRI_305",
+  "section_id": "GRI_305_SCOPE1_2024",
+  "execution_id": "test-val-003",
+  "retry_count": 0
+}
+
+// ============================================================
+// TEST 4: PCAF weighted > gross — should FAIL_NO_RETRY (VAL-NUM-06)
+// ============================================================
+{
+  "section_content": {
+    "section_id": "GRI_305_SCOPE3_PCAF_2024",
+    "title": "GRI 305-3: Financed Emissions (PCAF)",
+    "paragraphs": [
+      {
+        "paragraph_type": "narrative",
+        "text": "Gross financed emissions totaled 500,000.00 tCO2e with confidence-weighted emissions of 600,000.00 tCO2e."
+      }
+    ],
+    "tables": [
+      {
+        "caption": "PCAF Summary",
+        "headers": ["Metric", "Value"],
+        "rows": [["Gross", "500000"], ["Weighted", "600000"]]
+      }
+    ],
+    "key_metrics": [{"metric": "gross", "value": 500000, "unit": "tCO2e"}],
+    "footnotes": [],
+    "framework_references": ["GRI 305-3"],
+    "data_sources_used": ["esg_aggregated.pcaf_by_sector"]
+  },
+  "source_metrics": {
+    "scope3_cat15_gross_tco2e": 500000.0,
+    "scope3_cat15_weighted_tco2e": 600000.0
+  },
+  "framework": "GRI_305",
+  "section_id": "GRI_305_SCOPE3_PCAF_2024",
+  "execution_id": "test-val-004",
+  "retry_count": 0
+}
+
+// ============================================================
+// TEST 5: Missing required keys — should FAIL (VAL-STR-02)
+// ============================================================
+{
+  "section_content": {
+    "section_id": "GRI_305_SCOPE1_2024",
+    "title": "Scope 1",
+    "paragraphs": []
+  },
+  "source_metrics": {"scope1_tco2e": 245.67},
+  "framework": "GRI_305",
+  "section_id": "GRI_305_SCOPE1_2024",
+  "execution_id": "test-val-005",
+  "retry_count": 0
+}
+
+// ============================================================
+// TEST 6: Calculation phrases — should FAIL (VAL-PRH-02)
+// ============================================================
+{
+  "section_content": {
+    "section_id": "GRI_305_SCOPE1_2024",
+    "title": "GRI 305-1: Direct (Scope 1) GHG Emissions",
+    "paragraphs": [
+      {
+        "paragraph_type": "narrative",
+        "text": "Total emissions were calculated as 245.67 tCO2e. This was computed by multiplying consumption by emission factors."
+      }
+    ],
+    "tables": [
+      {
+        "caption": "Summary",
+        "headers": ["Metric", "Value"],
+        "rows": [["Total", "245.67"]]
+      }
+    ],
+    "key_metrics": [{"metric": "total", "value": 245.67, "unit": "tCO2e"}],
+    "footnotes": [],
+    "framework_references": ["GRI 305-1a"],
+    "data_sources_used": ["esg_aggregated.ghg_summary_annual"]
+  },
+  "source_metrics": {"scope1_tco2e": 245.67},
+  "framework": "GRI_305",
+  "section_id": "GRI_305_SCOPE1_2024",
+  "execution_id": "test-val-006",
+  "retry_count": 0
+}
+
+// ============================================================
+// TEST 7: Retry scenario — fabricated number + retry_count=1 → FAIL
+// ============================================================
+{
+  "section_content": {
+    "section_id": "GRI_305_SCOPE1_2024",
+    "title": "GRI 305-1: Direct (Scope 1) GHG Emissions",
+    "paragraphs": [
+      {
+        "paragraph_type": "narrative",
+        "text": "Total emissions were 999.99 tCO2e for the period."
+      }
+    ],
+    "tables": [
+      {
+        "caption": "Summary",
+        "headers": ["Metric", "Value"],
+        "rows": [["Total", "999.99"]]
+      }
+    ],
+    "key_metrics": [{"metric": "total", "value": 999.99, "unit": "tCO2e"}],
+    "footnotes": [],
+    "framework_references": ["GRI 305-1a"],
+    "data_sources_used": ["esg_aggregated.ghg_summary_annual"]
+  },
+  "source_metrics": {"scope1_tco2e": 245.67},
+  "framework": "GRI_305",
+  "section_id": "GRI_305_SCOPE1_2024",
+  "execution_id": "test-val-007",
+  "retry_count": 1
+}
+
+expected:
+| Test | Expected Outcome | Key Violations |
+|------|-----------------|----------------|
+| 1 | **PASS** | No violations |
+| 2 | **RETRY** | VAL-NUM-01 (fabricated 999.99), retry_count=0 → RETRY |
+| 3 | **FAIL** | VAL-PRH-04 (we, our), VAL-PRH-05 (industry-leading, groundbreaking) |
+| 4 | **FAIL_NO_RETRY** | VAL-NUM-06 (weighted 600k > gross 500k) → HumanReview |
+| 5 | **FAIL** | VAL-STR-02 (missing: tables, key_metrics, footnotes, framework_references) |
+| 6 | **FAIL** | VAL-PRH-02 ("calculated as", "computed by", "multiplied by") |
+| 7 | **FAIL** | VAL-NUM-01 (fabricated 999.99), retry_count=1 → no more retries → FAIL |
+
+Lambda #5: AssemblyDocFn — Test Cases
+
+// ============================================================
+// TEST 1: Two sections — verify DOCX output
+// ============================================================
+{
+  "sections": [
+    {
+      "section_id": "GRI_305_SCOPE1_2024",
+      "framework": "GRI_305",
+      "content_json": {
+        "title": "GRI 305-1: Direct (Scope 1) GHG Emissions",
+        "paragraphs": [
+          {
+            "paragraph_type": "narrative",
+            "text": "Total direct GHG emissions for the reporting period amounted to 245.67 tCO2e, representing a decrease of 5.2% compared to the prior year."
+          },
+          {
+            "paragraph_type": "methodology",
+            "text": "Emissions are quantified using the GHG Protocol operational control approach with DEFRA 2025 emission factors and IPCC AR6 GWP values."
+          }
+        ],
+        "tables": [
+          {
+            "caption": "Scope 1 Emissions by Source (2024)",
+            "headers": ["Source", "Emissions (tCO2e)", "Share (%)"],
+            "rows": [
+              ["Natural Gas Combustion", "189.23", "77.0"],
+              ["Diesel (Generator Sets)", "56.44", "23.0"],
+              ["Total Scope 1", "245.67", "100.0"]
+            ],
+            "source_note": "ESG Data Platform — esg_aggregated.ghg_summary_annual"
+          }
+        ],
+        "footnotes": [
+          "GWP values applied: CH4 = 29.8, N2O = 273.0 (IPCC AR6, 100-year horizon)",
+          "Consolidation approach: Operational control per GHG Protocol guidance"
+        ],
+        "framework_references": ["GRI 305-1a", "GRI 305-1b", "GRI 305-1c", "GRI 305-1d", "GRI 305-1e"]
+      }
+    },
+    {
+      "section_id": "GRI_305_SCOPE3_PCAF_2024",
+      "framework": "GRI_305",
+      "content_json": {
+        "title": "GRI 305-3: Other Indirect (Scope 3) GHG Emissions — Financed Emissions",
+        "paragraphs": [
+          {
+            "paragraph_type": "narrative",
+            "text": "Financed emissions (Scope 3, Category 15) totaled 892,456.78 tCO2e on a gross basis and 714,532.11 tCO2e on a confidence-weighted basis. The portfolio-weighted PCAF data quality score stands at 3.43."
+          }
+        ],
+        "tables": [
+          {
+            "caption": "Top 5 Sectors by Financed Emissions",
+            "headers": ["Sector", "Gross (tCO2e)", "Weighted (tCO2e)", "PCAF Score"],
+            "rows": [
+              ["Energy - Oil & Gas", "456,789.12", "365,431.30", "3.21"],
+              ["Manufacturing - Heavy", "234,567.89", "187,654.31", "3.56"],
+              ["Transportation", "98,765.43", "79,012.34", "3.78"],
+              ["Mining & Metals", "67,890.12", "54,312.10", "4.01"],
+              ["Utilities", "34,444.22", "28,122.06", "2.89"]
+            ],
+            "source_note": "ESG Data Platform — esg_aggregated.pcaf_by_sector"
+          }
+        ],
+        "footnotes": [
+          "PCAF Global GHG Accounting Standard Part A (2022) applied for attribution",
+          "Data quality score range: 1 (highest) to 5 (lowest)"
+        ],
+        "framework_references": ["GRI 305-3a", "GRI 305-3b", "GRI 305-3d"]
+      }
+    }
+  ],
+  "output_bucket": "esg-output-reports-061039769766",
+  "reporting_year": 2024,
+  "bank_id": "GENERIC_FI_001",
+  "framework": "GRI_305",
+  "execution_id": "test-assembly-001",
+  "generation_timestamp": "2026-06-04T05:00:00Z"
+}
+
+// ============================================================
+// TEST 2: Empty sections — should handle gracefully
+// ============================================================
+{
+  "sections": [
+    {
+      "section_id": "GRI_305_SCOPE1_2024",
+      "framework": "GRI_305",
+      "content_json": {}
+    }
+  ],
+  "output_bucket": "esg-output-reports-061039769766",
+  "reporting_year": 2024,
+  "bank_id": "GENERIC_FI_001",
+  "framework": "GRI_305",
+  "execution_id": "test-assembly-002",
+  "generation_timestamp": "2026-06-04T05:00:00Z"
+}
+
+
+expected
+| Test | Verify |
+|------|--------|
+| 1 | `s3_path` returned, download DOCX → open in Word → check: cover page, TOC, 2 sections, appendices, headers/footers, table styling |
+| 2 | `sections_assembled` = 0 (empty content skipped), DOCX still valid with cover + TOC + appendices |

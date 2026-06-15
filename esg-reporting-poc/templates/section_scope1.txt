@@ -1,0 +1,69 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-03
+# SECTION: SCOPE1_DIRECT
+# TOKEN_COUNT: ~400
+
+## SECTION TEMPLATE: Scope 1 Direct GHG Emissions
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (MANDATORY — DO NOT MODIFY)
+title: "GRI 305-1: Direct (Scope 1) GHG Emissions"
+
+### OBJECTIVE
+Generate a disclosure section reporting total Scope 1 direct GHG emissions
+for the reporting year. Include source breakdown, methodology transparency,
+base year comparison, and year-over-year trend analysis.
+
+### DATA INPUT
+{
+  "scope1_tco2e": {scope1_tco2e},
+  "scope1_natgas_tco2e": {scope1_natgas_tco2e},
+  "scope1_diesel_tco2e": {scope1_diesel_tco2e},
+  "prior_year_scope1_tco2e": {prior_year_scope1_tco2e},
+  "yoy_scope1_change_pct": {yoy_scope1_change_pct},
+  "base_year": {base_year},
+  "ef_source": "{ef_source}",
+  "data_quality_score": {scope1_data_quality_score},
+  "consolidation_approach": "{consolidation_approach}",
+  "methodology": "GHG_Protocol_Corporate_Standard_v2015",
+  "gwp_source": "IPCC AR6 GWP100",
+  "gases_included": ["CO2", "CH4", "N2O"]
+}
+
+### RAG CONTEXT
+{rag_context_scope1}
+
+### REQUIRED ELEMENTS
+1. Opening paragraph: state total Scope 1 emissions with unit (tCO2e)
+2. Source breakdown: natural gas combustion vs diesel combustion with values
+3. Methodology paragraph: emission factors, GWP values (CH4=29.8, N2O=273.0), consolidation approach
+4. Year-over-year comparison (OMIT if {yoy_scope1_change_pct} is NULL)
+5. Base year comparison (OMIT if reporting_year = base_year)
+6. Data quality footnote (INCLUDE ONLY if {scope1_data_quality_score} >= 3)
+7. Table: emission source breakdown with values from DATA INPUT
+
+### RECONCILIATION CONSTRAINT
+scope1_natgas_tco2e + scope1_diesel_tco2e MUST equal scope1_tco2e in narrative.
+If values do not reconcile, flag in footnotes.
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.
+
+### ADVISORY RECOMMENDATION BLOCK (MANDATORY)
+After the main disclosure content, generate 2-3 specific, actionable recommendations based on the data trends observed:
+
+FORMAT per recommendation:
+- **Finding**: [One-sentence observation from data, e.g., "Scope 1 emissions increased 2.36% YoY"]
+- **Benchmark**: [Peer comparison from RAG CONTEXT, e.g., "DBS achieved 12% YoY reduction through RE100 and green building"]
+- **Recommendation**: [Specific action, e.g., "Implement auto-shutdown systems and LED retrofit across branches"]
+- **Reference**: [Bank that has done this, e.g., "BRI achieved 19.49% electricity savings via BRILiaN Tower green building certification"]
+- **Priority**: [High/Medium/Low based on gap size vs peers]
+
+RULES:
+- Recommendations MUST reference specific bank examples from RAG CONTEXT (PEER BENCHMARKS section)
+- Recommendations MUST include numeric targets based on peer benchmarks
+- Do NOT generate generic recommendations like "reduce emissions"
+- If metric is IMPROVING vs prior year, acknowledge it and suggest next milestone
+- If metric is DECLINING or INCREASING (for emissions), flag as risk and provide corrective action

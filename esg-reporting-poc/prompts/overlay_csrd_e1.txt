@@ -1,0 +1,56 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-03
+# FRAMEWORK: CSRD_ESRS_E1
+# TOKEN_COUNT: ~550
+# COMPATIBLE_MODEL: anthropic.claude-*
+
+## FRAMEWORK: CSRD / ESRS E1 Climate Change (2023)
+
+You are generating disclosures per European Sustainability Reporting Standards E1. All nine E1 datapoints must be addressed where data is available.
+
+### REQUIRED DATAPOINTS (E1-1 through E1-9)
+
+E1-1: Transition plan — Paris Agreement alignment; GHG reduction levers; CapEx/OpEx allocation; timeline with milestones; locked-in emissions.
+
+E1-2: Policies — Policy scope (own operations + value chain); 1.5°C alignment; value chain engagement.
+
+E1-3: Actions and resources — Specific actions taken/planned; resources allocated (IDR); expected outcomes; timeline.
+
+E1-4: Targets — Absolute AND intensity targets; base year; target year; interim milestones; SBTi alignment status.
+
+E1-5: Energy consumption and mix — Total energy (MWh); renewable vs non-renewable (%); fossil source breakdown.
+
+E1-6: Gross Scopes 1, 2, 3 and Total GHG — By scope in tCO2e; by country if material; methodology; significant changes vs prior period.
+
+E1-7: GHG removals and carbon credits — Removals (if any); credits purchased; retirement status; registry.
+
+E1-8: Internal carbon pricing — Price (if applied); scope of application; decision-making influence.
+
+E1-9: Anticipated financial effects — Physical risk exposure (IDR); transition risk exposure; opportunities; time horizons; % assets at risk.
+
+### DOUBLE MATERIALITY STATEMENT (MUST INCLUDE)
+"Climate change has been assessed as material under both impact materiality (the institution's impact on climate through GHG emissions) and financial materiality (climate-related risks and opportunities affecting the institution's financial position, performance, and cash flows)."
+
+### ESRS-SPECIFIC TERMINOLOGY
+- "Double materiality" — must appear in introduction
+- "Impact, Risk, Opportunity (IRO)" — categorisation framework
+- "Value chain" — specify: upstream, own operations, downstream
+- "Transition plan" — ESRS E1-1; reference Paris Agreement
+- "Locked-in emissions" — from existing assets/contracts
+- "EU Taxonomy alignment" — if applicable; state % revenue/CapEx/OpEx
+
+### IRO CATEGORISATION TABLE (MUST INCLUDE FOR E1-9)
+| Category | Type | Time Horizon | Likelihood | Magnitude |
+| Physical — Acute | Flooding, extreme weather | Short-medium | [from data] | [from data] |
+| Physical — Chronic | Sea level rise, temperature | Long-term | [from data] | [from data] |
+| Transition — Policy | Carbon pricing, regulation | Short-medium | [from data] | [from data] |
+| Transition — Technology | Stranded assets | Medium-long | [from data] | [from data] |
+| Opportunity | Green finance products | Short-medium | [from data] | [from data] |
+
+### PARAGRAPH COUNT
+- E1-1 Transition: 5–7 paragraphs
+- E1-5 Energy: 3–4 paragraphs + energy mix table
+- E1-6 GHG: 5–7 paragraphs + E1-6 datapoint table (double materiality framing)
+- E1-9 Financial effects: 4–6 paragraphs + IRO table
+- Scope 1: 5–7 paragraphs + source table (double materiality framing)
+- PCAF: 6–9 paragraphs + sector table (value chain downstream framing)

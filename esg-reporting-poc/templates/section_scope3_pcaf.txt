@@ -1,0 +1,73 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-03
+# SECTION: SCOPE3_PCAF_FINANCED
+# TOKEN_COUNT: ~500
+
+## SECTION TEMPLATE: PCAF Financed Emissions (Scope 3 Category 15)
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (MANDATORY — DO NOT MODIFY)
+title: "GRI 305-3: Other Indirect (Scope 3) GHG Emissions — PCAF Financed Emissions"
+
+### OBJECTIVE
+Generate a disclosure section reporting total financed emissions calculated
+under the PCAF Global GHG Accounting Standard. Include portfolio-level totals,
+sector breakdown (top 5 emitting sectors), data quality assessment, and
+year-over-year trend.
+
+CRITICAL: Gross and weighted figures MUST be reported as SEPARATE metrics.
+Never average or conflate them. This is enforced by validation rule VAL-NUM-06.
+
+### DATA INPUT
+{
+  "scope3_cat15_gross_tco2e": {scope3_cat15_gross_tco2e},
+  "scope3_cat15_weighted_tco2e": {scope3_cat15_weighted_tco2e},
+  "total_portfolio_idr_trillion": {total_portfolio_idr_trillion},
+  "avg_pcaf_data_quality": {avg_pcaf_data_quality},
+  "high_quality_data_pct": {high_quality_data_pct},
+  "portfolio_coverage_pct": {portfolio_coverage_pct},
+  "prior_year_scope3_gross": {prior_year_scope3_gross},
+  "yoy_scope3_change_pct": {yoy_scope3_change_pct},
+  "sector_breakdown": {sector_breakdown_json}
+}
+
+### RAG CONTEXT
+{rag_context_scope3_pcaf}
+
+### REQUIRED ELEMENTS
+1. Opening paragraph: state total gross financed emissions with unit (tCO2e)
+2. PCAF methodology paragraph: attribution factor formula, asset classes covered
+3. Sector breakdown table: top 5 sectors by gross emissions
+4. Data quality assessment: portfolio-weighted score, high-quality percentage
+5. Gross vs weighted distinction paragraph (MANDATORY — VAL-NUM-06 enforced)
+6. Year-over-year comparison (OMIT if {yoy_scope3_change_pct} is NULL)
+7. Portfolio coverage statement (target: >90% for PCAF signatory)
+8. Data quality improvement roadmap (INCLUDE if {avg_pcaf_data_quality} > 3.5)
+
+### CRITICAL CONSTRAINT (VAL-NUM-06)
+The narrative MUST clearly distinguish between:
+- "Gross financed emissions" = {scope3_cat15_gross_tco2e} tCO2e
+- "Confidence-weighted financed emissions" = {scope3_cat15_weighted_tco2e} tCO2e
+These MUST appear as separate figures with distinct labels.
+weighted MUST always be <= gross. Conflation triggers validation FAIL.
+
+### PCAF CONFIDENCE FACTOR REFERENCE
+| Tier | Factor | Description |
+| 1    | 1.00   | Verified (CDP/equivalent) |
+| 2    | 0.90   | Reported, unverified |
+| 3    | 0.75   | EEIO + revenue |
+| 4    | 0.60   | EEIO + assets |
+| 5    | 0.45   | Sector-average proxy |
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.
+
+### ADVISORY RECOMMENDATION BLOCK (MANDATORY)
+Generate 2-3 specific recommendations referencing peer banks from RAG CONTEXT:
+- **Finding**: [Observation from PCAF data quality, coverage, or trend]
+- **Benchmark**: [Peer comparison, e.g., "BRI covers 6 PCAF asset classes with SBTi commitment"]
+- **Recommendation**: [Specific action with target]
+- **Reference**: [Bank name + implementation]
+- **Priority**: [High/Medium/Low]

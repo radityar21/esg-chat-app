@@ -1,0 +1,97 @@
+# VERSION: 2.0.0
+# LAST_MODIFIED: 2026-06-10
+# SECTION: SCOPE1_UNIFIED
+# MODE: MULTI_FRAMEWORK (unified narrative covering GRI + IFRS + ESRS + OJK)
+
+## SECTION TITLE (MANDATORY)
+title: "1.1 Direct GHG Emissions — Scope 1"
+
+## FRAMEWORKS ADDRESSED
+This single unified section must satisfy ALL of the following simultaneously:
+- GRI 305-1 (Disclosures a through g)
+- IFRS S2 Paragraph 29(a)(i) — absolute gross Scope 1
+- ESRS E1-6 DR E1-6.44 — gross Scope 1 GHG emissions
+- OJK PSPK — Emisi Gas Rumah Kaca Langsung (Lingkup 1)
+
+## DATA INPUT
+{
+  "scope1_tco2e": from ghg_summary,
+  "scope1_natgas_tco2e": from ghg_summary,
+  "scope1_diesel_tco2e": from ghg_summary,
+  "prior_year_scope1_tco2e": from prior_year_summary,
+  "yoy_change_pct": from ghg_summary,
+  "scope1_facilities": top 10 facility breakdown
+}
+
+## NARRATIVE APPROACH
+Write a SINGLE coherent narrative addressing ALL frameworks simultaneously.
+Do NOT create separate sub-sections per framework.
+Do NOT repeat the same data multiple times.
+Flow: Overview → Source Breakdown → Methodology → Trend Analysis → Advisory
+
+## REQUIRED ELEMENTS
+
+### 1. Opening Paragraph (GRI 305-1a, IFRS S2 Para 29(a)(i), ESRS E1-6.44)
+- Total gross Scope 1 emissions in tCO₂e
+- Operational boundary statement (operational control approach)
+- Reporting period
+
+### 2. Source Breakdown (GRI 305-1a)
+- Natural gas combustion: {scope1_natgas_tco2e} tCO₂e
+- Diesel combustion: {scope1_diesel_tco2e} tCO₂e
+- Percentage split
+- Table: Scope 1 Emissions by Source
+
+### 3. Methodology (GRI 305-1e/f/g, IFRS S2 Para 29(c), ESRS E1-6)
+- GHG Protocol Corporate Standard (Revised 2015)
+- Consolidation approach: operational control
+- Emission factors: source and version
+- GWP values: IPCC AR6 (CH4=29.8, N2O=273.0)
+- Gases included: CO₂, CH₄, N₂O
+
+### 4. Year-over-Year Analysis (IFRS S2 Para 29(b), ESRS E1-6)
+- Prior year comparison with absolute and percentage change
+- Explanation of drivers (operational growth, efficiency, etc.)
+- Table: YoY Comparison
+
+### 5. Facility Breakdown (if scope1_facilities available)
+- Top 5 emitting facilities
+- Table: Facility-level emissions
+
+### 6. Framework Cross-Reference Table (MANDATORY)
+| Framework | Disclosure Ref | Requirement | Status |
+|-----------|---------------|-------------|--------|
+| GRI 305-1 | 305-1a | Gross direct (Scope 1) GHG emissions in tCO₂e | ✅ Disclosed |
+| GRI 305-1 | 305-1b | Gases included (CO₂, CH₄, N₂O) | ✅ Disclosed |
+| GRI 305-1 | 305-1e | Emission factors and GWP source | ✅ Disclosed |
+| GRI 305-1 | 305-1f | Consolidation approach | ✅ Disclosed |
+| GRI 305-1 | 305-1g | Standards/methodologies used | ✅ Disclosed |
+| IFRS S2 | Para 29(a)(i) | Absolute gross Scope 1 GHG emissions | ✅ Disclosed |
+| IFRS S2 | Para 29(b) | Amount of change (trend over time) | ✅ Disclosed |
+| IFRS S2 | Para 29(c) | Measurement approach | ✅ Disclosed |
+| ESRS E1 | DR E1-6.44 | Gross Scope 1 GHG emissions | ✅ Disclosed |
+| OJK PSPK | Emisi GRK Langsung | Emisi Lingkup 1 (tCO₂e) | ✅ Disclosed |
+
+### 7. Advisory Recommendations (MANDATORY)
+Generate 2-3 specific recommendations based on data trends:
+- **Finding**: [observation from data]
+- **Benchmark**: [peer comparison from RAG CONTEXT]
+- **Recommendation**: [specific action with target]
+- **Reference**: [bank name that implemented this]
+- **Priority**: [High/Medium/Low]
+
+## CONSTRAINTS
+- VAL-NUM-01: All numbers MUST exist in DATA INPUT
+- DI-2: No self-calculation
+- Third person only ("The institution")
+- Temperature = 0 (deterministic)
+
+## CONDITIONAL LOGIC
+IF yoy_change_pct is NULL: OMIT YoY comparison section
+IF scope1_facilities is empty: OMIT facility breakdown
+IF RAG CONTEXT has peer benchmarks: Include in advisory
+IF RAG CONTEXT is empty: Generate advisory based on data trends only
+
+## OUTPUT FORMAT
+Return JSON per system_base.txt REQ-PROMPT-02. Must include:
+- "framework_cross_reference" field (dict mapping framework → list of disclosure IDs addressed)

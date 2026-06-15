@@ -1,0 +1,71 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-06-03
+# SECTION: EXECUTIVE_SUMMARY
+# TOKEN_COUNT: ~350
+
+## SECTION TEMPLATE: Executive Summary — Total GHG Emissions
+SECTION_ID: {section_id}
+FRAMEWORK: {framework}
+REPORTING_YEAR: {reporting_year}
+
+### EXACT TITLE (CONDITIONAL BY FRAMEWORK — MANDATORY)
+- IF framework = GRI_305 or NONE: title = "Executive Summary: Total GHG Emissions"
+- IF framework = IFRS_S2: title = "Executive Summary: Climate-Related Financial Disclosures"
+- IF framework = CSRD_ESRS_E1: title = "Executive Summary: Climate Change Disclosures"
+- IF framework = OJK_PSPK: title = "Ringkasan Eksekutif: Kinerja Emisi Gas Rumah Kaca"
+- IF framework = MULTI_FRAMEWORK: title = "Executive Summary: Total GHG Emissions & ESG Performance"
+- DEFAULT: title = "Executive Summary: Total GHG Emissions"
+
+### FRAMEWORK-SPECIFIC EMPHASIS
+- IF framework = IFRS_S2: Emphasize climate financial risk, investor-relevance, TCFD alignment, materiality.
+- IF framework = GRI_305 or NONE: Emphasize disclosure completeness, materiality assessment, stakeholder context.
+- IF framework = OJK_PSPK: Emphasize kepatuhan regulasi, pencapaian SFAP, keselarasan dengan kebijakan nasional. Use Bahasa Indonesia for key conclusions.
+- IF framework = CSRD_ESRS_E1: Emphasize double materiality, EU taxonomy alignment, transition readiness.
+- IF framework = MULTI_FRAMEWORK: Provide comprehensive overview across all pillars (E, S, G).
+
+### OBJECTIVE
+Generate an executive summary section presenting the institution's total GHG
+footprint across all scopes. This section is generated LAST (after all
+framework-specific sections) and uses ONLY DATA INPUT — no RAG context.
+
+### DATA INPUT
+{
+  "scope1_tco2e": {scope1_tco2e},
+  "scope2_location_tco2e": {scope2_location_tco2e},
+  "scope2_market_tco2e": {scope2_market_tco2e},
+  "scope3_cat15_gross_tco2e": {scope3_cat15_gross_tco2e},
+  "scope3_cat15_weighted_tco2e": {scope3_cat15_weighted_tco2e},
+  "total_tco2e": {total_tco2e},
+  "intensity_tco2e_per_idr_bn": {intensity_tco2e_per_idr_bn},
+  "intensity_tco2e_per_fte": {intensity_tco2e_per_fte},
+  "yoy_change_pct": {yoy_change_pct},
+  "vs_base_year_change_pct": {vs_base_year_change_pct},
+  "avg_pcaf_data_quality": {avg_pcaf_data_quality},
+  "assurance_level": "{assurance_level}",
+  "reporting_year": {reporting_year},
+  "base_year": {base_year}
+}
+
+### RAG CONTEXT
+None (executive summary does not use RAG retrieval)
+
+### REQUIRED ELEMENTS
+1. Opening statement: total GHG footprint in tCO2e (scope1 + scope2_market + scope3_gross)
+2. Scope breakdown paragraph: contributions by scope (absolute + percentage of total)
+3. Summary table: all scopes with values
+4. Intensity metrics: per revenue and per FTE
+5. Year-over-year trend (OMIT if yoy_change_pct is NULL)
+6. Base year comparison (OMIT if reporting_year = base_year)
+7. Data quality statement: PCAF portfolio score
+8. Assurance statement footnote
+
+### TOTAL FORMULA CONSTRAINT
+total_tco2e MUST equal scope1_tco2e + scope2_market_tco2e + scope3_cat15_gross_tco2e
+(uses market-based Scope 2 per GHG Protocol hierarchy)
+Location-based total is reported SEPARATELY as supplementary.
+
+### PARAGRAPH COUNT
+3–5 paragraphs + summary table + footnotes
+
+### OUTPUT FORMAT
+Return JSON per the contract in system_base.txt Section REQ-PROMPT-02.

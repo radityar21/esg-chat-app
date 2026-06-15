@@ -1,0 +1,77 @@
+# =============================================================================
+# ESG Reporting POC - Configuration
+# =============================================================================
+
+project:
+  name: "ESG Reporting POC"
+  version: "0.1.0"
+  environment: "poc"
+  tags:
+    Project: ESG
+    Env: POC
+    Team: Sustainability
+
+aws:
+  region_primary: "us-east-1"            # N. Virginia - all services
+  region_bedrock: "us-east-1"            # N. Virginia - Bedrock & KB
+  account_id: "${AWS_ACCOUNT_ID}"        # Resolved at runtime
+
+s3:
+  buckets:
+    raw: "esg-data-raw-${account_id}"
+    curated: "esg-data-curated-${account_id}"
+    aggregated: "esg-data-aggregated-${account_id}"
+    reports: "esg-output-reports-${account_id}"
+    kb_documents: "esg-kb-documents-${account_id}"
+
+athena:
+  workgroup: "esg-reporting"
+  databases:
+    raw: "esg_raw"
+    curated: "esg_curated"
+    aggregated: "esg_aggregated"
+
+glue:
+  jobs:
+    scope1: "esg-scope1-calculation"
+    scope2: "esg-scope2-calculation"
+    scope3_pcaf: "esg-scope3-pcaf-calculation"
+    aggregation: "esg-aggregation"
+
+bedrock:
+  model_id: "anthropic.claude-3-5-sonnet-20241022-v2:0"
+  knowledge_base_id: "${ESG_KB_ID}"
+  guardrail_id: "${ESG_GUARDRAIL_ID}"
+  max_tokens: 4096
+  temperature: 0.1
+
+frameworks:
+  - id: "GRI_305"
+    name: "GRI 305 Emissions 2016"
+    overlay_prompt: "overlay_gri305.txt"
+  - id: "IFRS_S2"
+    name: "IFRS S2 Climate-related Disclosures"
+    overlay_prompt: "overlay_ifrs_s2.txt"
+  - id: "CSRD_E1"
+    name: "ESRS E1 Climate Change"
+    overlay_prompt: "overlay_csrd_e1.txt"
+  - id: "OJK_PSPK"
+    name: "OJK POJK 51/2017"
+    overlay_prompt: "overlay_ojk_pspk.txt"
+
+reporting:
+  years: [2023, 2024]
+  data_domains:
+    - emissions
+    - energy
+    - water
+    - waste
+    - social
+    - governance
+
+emission_factors:
+  natural_gas_co2_per_gj: 56.10
+  diesel_co2_per_liter: 2.6710
+  diesel_ch4_per_liter: 0.00029
+  diesel_n2o_per_liter: 0.03308
+  electricity_grid_factor_kg_per_kwh: 0.7886
