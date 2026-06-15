@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendChat, checkStatus } from '../api'
+import { useTheme } from '../ThemeContext'
 import { Send, Bot, User, Loader2, CheckCircle2, AlertCircle, Download, Sparkles } from 'lucide-react'
 
 export default function Chat() {
+  const { isDark } = useTheme()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -13,7 +15,6 @@ export default function Chat() {
 
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  // Polling logic
   useEffect(() => {
     if (!polling || !executionId) return
     const interval = setInterval(async () => {
@@ -21,20 +22,10 @@ export default function Chat() {
         const data = await checkStatus(executionId)
         if (data.status === 'SUCCEEDED') {
           setPolling(false)
-          setMessages(prev => [...prev, {
-            role: 'system',
-            type: 'success',
-            text: 'Report generated successfully!',
-            download_url: data.download_url,
-            download_url_pptx: data.download_url_pptx,
-          }])
+          setMessages(prev => [...prev, { role: 'system', type: 'success', text: 'Report generated successfully!', download_url: data.download_url, download_url_pptx: data.download_url_pptx }])
         } else if (data.status === 'FAILED') {
           setPolling(false)
-          setMessages(prev => [...prev, {
-            role: 'system',
-            type: 'error',
-            text: `Report generation failed: ${data.error || 'Unknown error'}`,
-          }])
+          setMessages(prev => [...prev, { role: 'system', type: 'error', text: `Report generation failed: ${data.error || 'Unknown error'}` }])
         }
       } catch (e) {}
     }, 30000)
@@ -47,13 +38,10 @@ export default function Chat() {
     setInput('')
     setMessages(prev => [...prev, { role: 'user', text: userMsg }])
     setLoading(true)
-
     try {
       const data = await sendChat(userMsg, sessionId)
       const reply = data.response || data.message || JSON.stringify(data)
       setMessages(prev => [...prev, { role: 'assistant', text: reply }])
-
-      // Detect execution ID for polling
       const match = reply.match(/Execution ID:\s*([a-f0-9-]+)/i)
       if (match) {
         setExecutionId(match[1])
@@ -71,14 +59,16 @@ export default function Chat() {
   return (
     <div className="flex flex-col h-full animate-fade-in">
       {/* Header */}
-      <div className="px-8 py-5 border-b border-white/[0.06] bg-dark-800/50 backdrop-blur-sm">
+      <div className={`px-8 py-5 border-b backdrop-blur-sm ${
+        isDark ? 'border-white/[0.06] bg-dark-800/50' : 'border-gray-100 bg-white/80'
+      }`}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-white">ESG Chat Assistant</h2>
-            <p className="text-xs text-white/40">Powered by Amazon Bedrock Agent</p>
+            <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>ESG Chat Assistant</h2>
+            <p className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-400'}`}>Powered by Amazon Bedrock Agent</p>
           </div>
         </div>
       </div>
@@ -87,22 +77,21 @@ export default function Chat() {
       <div className="flex-1 overflow-y-auto p-8 space-y-4">
         {messages.length === 0 && (
           <div className="text-center py-16">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-accent-blue/20 to-accent-teal/10 border border-white/[0.08] flex items-center justify-center mx-auto mb-4">
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+              isDark ? 'bg-gradient-to-br from-accent-blue/20 to-accent-teal/10 border border-white/[0.08]' : 'bg-gradient-to-br from-accent-blue/10 to-accent-teal/5 border border-gray-200'
+            }`}>
               <Bot className="w-7 h-7 text-accent-blue" />
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Start a Conversation</h3>
-            <p className="text-sm text-white/40 max-w-sm mx-auto mb-6">Ask questions about ESG frameworks or generate a sustainability report</p>
+            <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-800'}`}>Start a Conversation</h3>
+            <p className={`text-sm max-w-sm mx-auto mb-6 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>Ask questions about ESG frameworks or generate a sustainability report</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {[
-                'Generate GRI 305 report for 2024',
-                'Create CSRD multi-framework report',
-                'What frameworks are supported?',
-              ].map((suggestion, i) => (
-                <button
-                  key={i}
-                  onClick={() => { setInput(suggestion) }}
-                  className="px-4 py-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-xs text-white/60 hover:bg-white/[0.06] hover:border-accent-blue/30 hover:text-white/80 transition-all"
-                >
+              {['Generate GRI 305 report for 2024', 'Create CSRD multi-framework report', 'What frameworks are supported?'].map((suggestion, i) => (
+                <button key={i} onClick={() => setInput(suggestion)}
+                  className={`px-4 py-2 rounded-xl text-xs transition-all ${
+                    isDark
+                      ? 'bg-white/[0.03] border border-white/[0.08] text-white/60 hover:bg-white/[0.06] hover:border-accent-blue/30 hover:text-white/80'
+                      : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-accent-blue/5 hover:border-accent-blue/30 hover:text-gray-800'
+                  }`}>
                   {suggestion}
                 </button>
               ))}
@@ -110,9 +99,7 @@ export default function Chat() {
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <MessageBubble key={i} message={msg} />
-        ))}
+        {messages.map((msg, i) => <MessageBubble key={i} message={msg} />)}
 
         {loading && (
           <div className="flex items-start gap-3">
@@ -122,7 +109,7 @@ export default function Chat() {
             <div className="glass-card px-4 py-3 rounded-2xl rounded-tl-md">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 text-accent-blue animate-spin" />
-                <span className="text-sm text-white/50">Thinking...</span>
+                <span className={`text-sm ${isDark ? 'text-white/50' : 'text-gray-500'}`}>Thinking...</span>
               </div>
             </div>
           </div>
@@ -134,27 +121,25 @@ export default function Chat() {
             <span className="text-xs text-esg-amber font-medium">Generating report... This may take 2-5 minutes</span>
           </div>
         )}
-
         <div ref={chatEnd} />
       </div>
 
       {/* Input */}
-      <div className="p-6 border-t border-white/[0.06] bg-dark-800/30 backdrop-blur-sm">
+      <div className={`p-6 border-t backdrop-blur-sm ${
+        isDark ? 'border-white/[0.06] bg-dark-800/30' : 'border-gray-100 bg-white/80'
+      }`}>
         <div className="flex gap-3 max-w-4xl mx-auto">
           <div className="flex-1 relative">
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKey}
+            <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
               placeholder="Ask about ESG reporting or generate a report..."
-              className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-5 py-3.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-accent-blue/40 focus:ring-1 focus:ring-accent-blue/20 transition-all"
-            />
+              className={`w-full rounded-xl px-5 py-3.5 text-sm focus:outline-none transition-all ${
+                isDark
+                  ? 'bg-white/[0.04] border border-white/[0.08] text-white placeholder-white/30 focus:border-accent-blue/40 focus:ring-1 focus:ring-accent-blue/20'
+                  : 'bg-gray-50 border border-gray-200 text-gray-800 placeholder-gray-400 focus:border-accent-blue/50 focus:ring-1 focus:ring-accent-blue/20 focus:bg-white'
+              }`} />
           </div>
-          <button
-            onClick={send}
-            disabled={loading || !input.trim()}
-            className="px-5 py-3.5 rounded-xl bg-gradient-to-r from-accent-blue to-accent-teal text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-neon-blue hover:shadow-neon-green"
-          >
+          <button onClick={send} disabled={loading || !input.trim()}
+            className="px-5 py-3.5 rounded-xl bg-gradient-to-r from-accent-blue to-accent-teal text-white text-sm font-medium hover:opacity-90 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-neon-blue hover:shadow-neon-green">
             <Send className="w-4 h-4" />
           </button>
         </div>
@@ -164,13 +149,14 @@ export default function Chat() {
 }
 
 function MessageBubble({ message }) {
+  const { isDark } = useTheme()
   const { role, text, type, download_url, download_url_pptx } = message
 
   if (role === 'user') {
     return (
       <div className="flex items-start gap-3 justify-end">
         <div className="max-w-[70%] bg-gradient-to-r from-accent-blue/20 to-accent-blue/10 border border-accent-blue/20 rounded-2xl rounded-tr-md px-4 py-3">
-          <p className="text-sm text-white/90 whitespace-pre-wrap">{text}</p>
+          <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-white/90' : 'text-gray-800'}`}>{text}</p>
         </div>
         <div className="w-8 h-8 rounded-lg bg-accent-blue/20 flex items-center justify-center flex-shrink-0">
           <User className="w-4 h-4 text-accent-blue" />
@@ -190,14 +176,12 @@ function MessageBubble({ message }) {
             <p className="text-sm text-esg-green font-medium mb-3">{text}</p>
             <div className="flex gap-2">
               {download_url && (
-                <a href={download_url} target="_blank" rel="noopener"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue/10 text-accent-blue text-xs font-medium hover:bg-accent-blue/20 transition-colors border border-accent-blue/20">
+                <a href={download_url} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue/10 text-accent-blue text-xs font-medium hover:bg-accent-blue/20 transition-colors border border-accent-blue/20">
                   <Download size={12} /> DOCX
                 </a>
               )}
               {download_url_pptx && (
-                <a href={download_url_pptx} target="_blank" rel="noopener"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-esg-amber/10 text-esg-amber text-xs font-medium hover:bg-esg-amber/20 transition-colors border border-esg-amber/20">
+                <a href={download_url_pptx} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-esg-amber/10 text-esg-amber text-xs font-medium hover:bg-esg-amber/20 transition-colors border border-esg-amber/20">
                   <Download size={12} /> PPTX
                 </a>
               )}
@@ -206,7 +190,6 @@ function MessageBubble({ message }) {
         </div>
       )
     }
-
     if (type === 'error') {
       return (
         <div className="flex items-start gap-3">
@@ -219,12 +202,12 @@ function MessageBubble({ message }) {
         </div>
       )
     }
-
-    // Info type
     return (
-      <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+      <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl ${
+        isDark ? 'bg-white/[0.02] border border-white/[0.06]' : 'bg-gray-50 border border-gray-100'
+      }`}>
         <Loader2 className="w-3.5 h-3.5 text-accent-blue animate-spin" />
-        <span className="text-xs text-white/50">{text}</span>
+        <span className={`text-xs ${isDark ? 'text-white/50' : 'text-gray-500'}`}>{text}</span>
       </div>
     )
   }
@@ -236,7 +219,7 @@ function MessageBubble({ message }) {
         <Bot className="w-4 h-4 text-accent-purple" />
       </div>
       <div className="glass-card px-4 py-3 rounded-2xl rounded-tl-md max-w-[70%]">
-        <p className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed">{text}</p>
+        <p className={`text-sm whitespace-pre-wrap leading-relaxed ${isDark ? 'text-white/80' : 'text-gray-700'}`}>{text}</p>
       </div>
     </div>
   )

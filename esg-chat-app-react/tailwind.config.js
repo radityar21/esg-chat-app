@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
+  darkMode: 'class',
   safelist: [
     // Dynamic color classes used in components
     'bg-accent-blue/10', 'bg-accent-blue/20', 'bg-accent-teal/10', 'bg-accent-teal/20',
@@ -27,6 +28,17 @@ export default {
           500: '#243055',
           400: '#2d3a66',
         },
+        light: {
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          300: '#cbd5e1',
+          400: '#94a3b8',
+          500: '#64748b',
+          600: '#475569',
+          700: '#334155',
+          800: '#1e293b',
+        },
         accent: {
           blue: '#4f8cf7',
           teal: '#06d6a0',
@@ -50,6 +62,8 @@ export default {
       boxShadow: {
         'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
         'glass-sm': '0 4px 16px 0 rgba(0, 0, 0, 0.25)',
+        'glass-light': '0 4px 24px 0 rgba(0, 0, 0, 0.06)',
+        'card-light': '0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04)',
         'neon-blue': '0 0 20px rgba(79, 140, 247, 0.3)',
         'neon-green': '0 0 20px rgba(6, 214, 160, 0.3)',
       },

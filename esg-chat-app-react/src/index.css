@@ -5,35 +5,99 @@
 @layer base {
   body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* Dark theme (default) */
+  .dark body,
+  html.dark body {
     background-color: #0a0e1a;
     color: #e2e8f0;
   }
 
-  ::-webkit-scrollbar {
+  /* Light theme */
+  .light body,
+  html.light body {
+    background-color: #f8fafc;
+    color: #1e293b;
+  }
+
+  /* Scrollbar — Dark */
+  .dark ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-  ::-webkit-scrollbar-track {
+  .dark ::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.02);
   }
-  ::-webkit-scrollbar-thumb {
+  .dark ::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 3px;
   }
-  ::-webkit-scrollbar-thumb:hover {
+  .dark ::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.2);
+  }
+
+  /* Scrollbar — Light */
+  .light ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .light ::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.02);
+  }
+  .light ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.12);
+    border-radius: 3px;
+  }
+  .light ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.2);
   }
 }
 
 @layer components {
-  .glass-card {
-    @apply bg-white/[0.03] backdrop-blur-xl border border-white/[0.08] rounded-2xl shadow-glass;
+  /* ─── Dark Theme Cards ──────────────────────────────────────────── */
+  .dark .glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+  .dark .glass-card-hover {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    transition: all 0.3s;
+  }
+  .dark .glass-card-hover:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 20px rgba(79, 140, 247, 0.3);
   }
 
-  .glass-card-hover {
-    @apply glass-card transition-all duration-300 hover:bg-white/[0.06] hover:border-white/[0.15] hover:shadow-neon-blue;
+  /* ─── Light Theme Cards ─────────────────────────────────────────── */
+  .light .glass-card {
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04);
+  }
+  .light .glass-card-hover {
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04);
+    transition: all 0.3s;
+  }
+  .light .glass-card-hover:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    border-color: rgba(79, 140, 247, 0.3);
   }
 
+  /* ─── Shared ───────────────────────────────────────────────────── */
   .gradient-text {
     @apply bg-gradient-to-r from-accent-blue to-accent-teal bg-clip-text text-transparent;
   }
@@ -54,16 +118,31 @@
     pointer-events: none;
   }
 
-  .stat-glow-blue {
+  /* ─── Dark Stat Glow ────────────────────────────────────────────── */
+  .dark .stat-glow-blue {
     box-shadow: 0 0 40px rgba(79, 140, 247, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
-  .stat-glow-green {
+  .dark .stat-glow-green {
     box-shadow: 0 0 40px rgba(6, 214, 160, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
-  .stat-glow-red {
+  .dark .stat-glow-red {
     box-shadow: 0 0 40px rgba(239, 68, 68, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
-  .stat-glow-amber {
+  .dark .stat-glow-amber {
     box-shadow: 0 0 40px rgba(251, 191, 36, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* ─── Light Stat Glow (subtle shadow) ───────────────────────────── */
+  .light .stat-glow-blue {
+    box-shadow: 0 2px 12px rgba(79, 140, 247, 0.12);
+  }
+  .light .stat-glow-green {
+    box-shadow: 0 2px 12px rgba(6, 214, 160, 0.12);
+  }
+  .light .stat-glow-red {
+    box-shadow: 0 2px 12px rgba(239, 68, 68, 0.12);
+  }
+  .light .stat-glow-amber {
+    box-shadow: 0 2px 12px rgba(251, 191, 36, 0.12);
   }
 }
