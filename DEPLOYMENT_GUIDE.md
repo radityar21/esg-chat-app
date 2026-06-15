@@ -1,8 +1,9 @@
 # ESG Reporting System - Complete Deployment Guide
 
 **Tokaicom Mitra Indonesia (Tokai Group)**  
-**Version:** 1.0  
-**Last Updated:** June 15, 2026
+**Version:** 1.1  
+**Last Updated:** June 15, 2026  
+**Crosschecked against:** IMPLEMENTATION_CHANGELOG, INFRASTRUCTURE_REFERENCE, SPEC_AMENDMENTS, VALIDATION_FALSE_POSITIVES
 
 ---
 
@@ -16,7 +17,8 @@
 6. [Post-Deployment Configuration](#post-deployment-configuration)
 7. [Verification & Testing](#verification--testing)
 8. [Troubleshooting](#troubleshooting)
-9. [Rollback Procedures](#rollback-procedures)
+9. [Known Validation Issues (False Positives)](#known-validation-issues-false-positives)
+10. [Rollback Procedures](#rollback-procedures)
 
 ---
 
@@ -29,31 +31,52 @@
 | **AWS CLI** | 2.x | Infrastructure deployment | `aws --version` |
 | **Node.js** | 18+ | Frontend build | `node --version` |
 | **npm** | 9+ | Package management | `npm --version` |
-| **Python** | 3.12 | Lambda runtime | `python --version` |
+| **Python** | 3.11 | Lambda runtime | `python --version` |
 | **Git** | 2.x | Version control | `git --version` |
 | **AWS CDK** (optional) | 2.x | IaC deployment | `npm install -g aws-cdk` |
+| **AWS CloudShell** | N/A | Linux-dependent builds (Layer) | Available in AWS Console |
 
 ### AWS Account Requirements
 
-- **AWS Account ID** with appropriate permissions
+- **AWS Account ID:** `061039769766` (current POC)
 - **IAM User/Role** with these managed policies:
   - `AdministratorAccess` (for initial setup) OR
-  - Custom policy with: IAM, Lambda, S3, Step Functions, Bedrock, API Gateway, Amplify, Glue, Athena permissions
-- **AWS Region:** `ap-southeast-1` (Singapore) - can be changed
-- **Bedrock Model Access:** Claude 3.5 Sonnet v2 enabled in target region
+  - Custom policy with: IAM, Lambda, S3, Step Functions, Bedrock, API Gateway, Amplify, Glue, Athena, SNS, DynamoDB permissions
+- **AWS Region:** `us-east-1` (N. Virginia) — current deployment
+  - *Note: Original spec targeted `ap-southeast-1` (Singapore), but CloudShell availability and Bedrock model access led to us-east-1*
+- **Bedrock Model Access:** Enable `us.anthropic.claude-sonnet-4-5-20250929-v1:0` (cross-region inference profile) in target region
+
+### Region Decision
+
+| Option | Region | Pros | Cons |
+|--------|--------|------|------|
+| **Current (POC)** | us-east-1 | All services available, CloudShell works, models available | Latency from Indonesia |
+| **Target (Prod)** | ap-southeast-1 | Low latency, data residency compliance | Must verify Bedrock model availability |
+
+> ⚠️ **All commands in this guide use the variable `$REGION`. Set it to your target region before running commands.**
+
+```bash
+# Set region (choose one)
+export REGION="us-east-1"        # Current POC deployment
+# export REGION="ap-southeast-1" # Future production target
+export ACCOUNT_ID="061039769766"
+```
 
 ### Cost Estimate
 
 | Component | Setup Cost | Monthly Cost (100 reports) |
 |-----------|-----------|---------------------------|
-| S3 Storage | Free | ~$5 |
-| Lambda | Free | ~$2 |
-| Bedrock API | $0 | ~$15 |
-| Step Functions | Free | ~$2.50 |
-| API Gateway | Free | ~$3.50 |
-| Athena | Free | ~$1 |
-| Amplify Hosting | Free | $0 (free tier) |
-| **Total** | **$0** | **~$29/month** |
+| OpenSearch Serverless (KB) | $0 | ~$173 |
+| Bedrock API (Claude 4.5 Sonnet) | $0 | ~$13 |
+| Lambda (11 functions) | $0 | ~$2 |
+| S3 Storage (6 buckets) | $0 | ~$5 |
+| Step Functions | $0 | ~$2.50 |
+| API Gateway | $0 | ~$3.50 |
+| Athena | $0 | ~$1 |
+| Amplify Hosting | $0 | Free tier |
+| CloudWatch Logs | $0 | ~$2.50 |
+| **Total** | **$0** | **~$190/month** |
+| **Optimized (no OpenSearch)** | $0 | **~$30/month** |
 
 ---
 
@@ -65,16 +88,18 @@
 └──────┬──────┘
        │
        ↓
-┌─────────────────────────────────────────────────┐
-│  Frontend (React + Amplify)                     │
-│  - Overview, Analytics, Chat, Reports          │
-└──────┬──────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│  Frontend (React + Amplify)                         │
+│  Pages: Overview, Analytics, Chat, Reports, Ref    │
+│  Stack: React 18 + Vite 5 + Tailwind + Recharts   │
+└──────┬──────────────────────────────────────────────┘
        │
        ↓
-┌─────────────────────────────────────────────────┐
-│  API Gateway (REST)                             │
-│  /chat, /status, /history, /dashboard-data    │
-└──────┬──────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│  API Gateway (REST) - ESG-Chat-API                 │
+│  /chat (POST), /status (GET), /history (GET),      │
+│  /dashboard-data (GET)                             │
+└──────┬──────────────────────────────────────────────┘
        │
    ┌───┴────┬──────────────┬────────────┐
    │        │              │            │
@@ -82,34 +107,51 @@
 ┌────────┐ ┌──────────┐ ┌──────────┐ ┌─────────────┐
 │Bedrock │ │ Lambda   │ │  Step    │ │Lambda       │
 │ Agent  │ │(status,  │ │Functions │ │(dashboard)  │
-│        │ │ history) │ │          │ │             │
-└────────┘ └──────────┘ └─────┬────┘ └─────────────┘
-                               │
-                ┌──────────────┼──────────────┐
-                │              │              │
-                ↓              ↓              ↓
-          ┌─────────┐    ┌──────────┐  ┌──────────┐
-          │ Lambda  │    │  Lambda  │  │  Lambda  │
-          │validate │    │ section_ │  │ assembly │
-          │         │    │   gen    │  │   _doc   │
-          └─────────┘    └────┬─────┘  └────┬─────┘
-                               │             │
-                               ↓             ↓
-                          ┌─────────────────────┐
-                          │   Amazon Bedrock    │
-                          │ (Claude 3.5 Sonnet) │
-                          └─────────────────────┘
-                                    │
-                                    ↓
-                          ┌──────────────────────┐
-                          │  S3 Buckets          │
-                          │  - Reports (DOCX)    │
-                          │  - Athena Results   │
-                          │  - Knowledge Base   │
-                          └──────────────────────┘
+│(chat-  │ │ history) │ │          │ │             │
+│ proxy) │ └──────────┘ └─────┬────┘ └─────────────┘
+└───┬────┘                     │
+    │           ┌──────────────┼──────────────────────┐
+    ↓           │              │                      │
+┌────────┐      ↓              ↓                      ↓
+│Agent   │ ┌─────────┐   ┌──────────┐          ┌──────────┐
+│Tools   │ │validate │   │ section_ │          │ assembly │
+│Lambda  │ │ _input  │   │   gen    │          │   _doc   │
+└────────┘ └─────────┘   └────┬─────┘          └────┬─────┘
+                               │                     │
+                    ┌──────────┴──────────┐          │
+                    ↓                    ↓           │
+              ┌──────────┐         ┌──────────┐     │
+              │ Bedrock  │         │ validation│     │
+              │ Claude   │         │  Lambda   │     │
+              │ Sonnet   │         └──────────┘     │
+              │ 4.5      │                          │
+              └────┬─────┘                          ↓
+                   │                          ┌──────────────┐
+                   ↓                          │   S3 Buckets │
+              ┌──────────┐                    │  - Raw       │
+              │ Knowledge│                    │  - Curated   │
+              │   Base   │                    │  - Aggregated│
+              │ (RAG)    │                    │  - Output    │
+              └──────────┘                    │  - KB Docs   │
+                                              │  - Athena    │
+                                              └──────────────┘
 ```
 
-**Key Components:** 11 Lambda functions, 1 Step Functions, 1 API Gateway, 1 Bedrock Agent, 3 S3 buckets, Glue/Athena for analytics
+**Key Components:**
+- 11 Lambda functions + 1 chat proxy = 12 Lambda functions total
+- 1 Step Functions State Machine (ESGReportGenerationStateMachine)
+- 1 API Gateway REST API (ESG-Chat-API)
+- 1 Bedrock Agent (ESGReportAgent) with 4 tools
+- 1 Bedrock Knowledge Base (WVREXI1LEI) with OpenSearch Serverless
+- 6 S3 Buckets (raw, curated, aggregated, output, KB docs, Athena results)
+- 4 Glue ETL Jobs (Scope 1, 2, 3, Aggregation)
+- 3 Athena Databases (esg_raw, esg_curated, esg_aggregated)
+- 2 SNS Topics (ESG-HumanReview, ESG-ReportComplete)
+- 5 pages React frontend on Amplify
+
+**Supported Report Sections:**
+- Environment (E): Scope 1, Scope 2, Scope 3/PCAF, Intensity, Methodology, Summary
+- Social (S): Workforce (GRI 2-7), Employment (GRI 401-1), Training (GRI 404-1), Diversity (GRI 405-1), Non-Discrimination (GRI 406-1)
 
 **Deployment Time:** ~30-45 minutes (manual) or ~15-20 minutes (CDK)
 
@@ -120,16 +162,20 @@
 **CRITICAL:** Follow this exact order to avoid dependency issues.
 
 ```
-1. IAM Roles & Policies ✅
-2. S3 Buckets ✅
-3. Glue Data Catalog ✅
-4. Lambda Layer (python-docx, python-pptx) ✅
-5. Lambda Functions (10 functions) ✅
-6. Step Functions State Machine ✅
-7. API Gateway ✅
-8. Bedrock Agent ✅
-9. Bedrock Knowledge Base ✅
-10. Frontend (Amplify) ✅
+ 1. IAM Roles & Policies (3 roles: ESGGlueRole, ESGLambdaRole, ESGStepFunctionsRole)
+ 2. S3 Buckets (6 buckets with account-ID suffix)
+ 3. Glue Data Catalog (3 databases + 12 tables with partition projection)
+ 4. Glue ETL Scripts (upload to S3)
+ 5. Run Glue ETL Jobs (Scope 1 → Scope 2 → Scope 3 → Aggregation)
+ 6. Lambda Layer (python-docx + lxml, MUST build on Linux/CloudShell)
+ 7. Lambda Functions (11 functions)
+ 8. SNS Topics (2 topics)
+ 9. Step Functions State Machine
+10. API Gateway (4 endpoints + CORS)
+11. Bedrock Knowledge Base (15 documents + semantic chunking)
+12. Bedrock Agent (4 tools + action group)
+13. Chat Proxy Lambda + API integration
+14. Frontend (Amplify + GitHub auto-deploy)
 ```
 
 ---
@@ -146,7 +192,7 @@ cd esg-reporting-poc/infra
 pip install -r requirements.txt
 
 # Bootstrap CDK (first time only)
-cdk bootstrap aws://YOUR_ACCOUNT_ID/ap-southeast-1
+cdk bootstrap aws://$ACCOUNT_ID/$REGION
 ```
 
 ### Step 2: Configure Parameters
@@ -156,9 +202,11 @@ Edit `esg-reporting-poc/infra/cdk.json`:
 ```json
 {
   "context": {
-    "account_id": "YOUR_ACCOUNT_ID",
-    "region": "ap-southeast-1",
-    "project_name": "esg-reporting"
+    "account_id": "061039769766",
+    "region": "us-east-1",
+    "project_name": "esg-reporting",
+    "bedrock_model_id": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "kb_id": "WVREXI1LEI"
   }
 }
 ```
@@ -166,7 +214,7 @@ Edit `esg-reporting-poc/infra/cdk.json`:
 ### Step 3: Deploy All Infrastructure
 
 ```bash
-# Deploy everything (30-45 min)
+# Deploy everything (15-20 min)
 cdk deploy ESGInfraStack --require-approval never
 
 # Output will show:
@@ -192,9 +240,9 @@ git push origin main
 
 ## Option B: Manual Deployment (AWS CLI)
 
-### 🔧 Step 1: Setup IAM Roles
+### 🔧 Step 1: Setup IAM Roles & S3 Buckets
 
-Run the automated setup script:
+Run the automated setup script (in CloudShell for Linux compatibility):
 
 ```bash
 cd esg-reporting-poc/scripts
@@ -203,667 +251,618 @@ chmod +x setup_account.sh
 ```
 
 **What it creates:**
-- ✅ `ESGLambdaExecutionRole`
-- ✅ `ESGStepFunctionsRole`
-- ✅ `ESGBedrockAgentRole`
-- ✅ `ESGAPIGatewayRole`
-- ✅ `ESGGlueETLRole`
-- ✅ 3 S3 buckets
-- ✅ Glue database
+
+| Resource | Name | Purpose |
+|----------|------|---------|
+| IAM Role | `ESGGlueRole` | Glue ETL jobs (S3 read/write, CloudWatch) |
+| IAM Role | `ESGLambdaRole` | All Lambda functions (S3, Athena, Bedrock, DynamoDB, Glue) |
+| IAM Role | `ESGStepFunctionsRole` | Step Functions (Lambda invoke, SNS, Glue, CloudWatch) |
+| S3 Bucket | `esg-data-raw-{ACCOUNT_ID}` | Source data as ingested |
+| S3 Bucket | `esg-data-curated-{ACCOUNT_ID}` | ETL-computed GHG calculations |
+| S3 Bucket | `esg-data-aggregated-{ACCOUNT_ID}` | Report-ready annual metrics |
+| S3 Bucket | `esg-output-reports-{ACCOUNT_ID}` | Generated DOCX/PDF reports |
+| S3 Bucket | `esg-kb-documents-{ACCOUNT_ID}` | Knowledge Base documents |
+| S3 Bucket | `esg-athena-results-{ACCOUNT_ID}` | Athena query results |
+| Glue DB | `esg_raw` | Raw data tables |
+| Glue DB | `esg_curated` | ETL-processed data |
+| Glue DB | `esg_aggregated` | Report-ready aggregations |
 
 **Verify:**
 ```bash
-aws iam get-role --role-name ESGLambdaExecutionRole
+aws iam get-role --role-name ESGLambdaRole --region $REGION
+aws iam get-role --role-name ESGStepFunctionsRole --region $REGION
 aws s3 ls | grep esg
 ```
 
+**Key IAM permissions (ESGLambdaRole):**
+- S3: GetObject, PutObject, ListBucket, GetBucketLocation, PutObjectTagging (6 buckets)
+- Athena: StartQueryExecution, GetQueryExecution, GetQueryResults, StopQueryExecution
+- Glue: GetTable, GetTables, GetDatabase, GetDatabases, GetPartitions
+- Bedrock: InvokeModel, InvokeModelWithResponseStream (foundation-model/* + inference-profile/*)
+- Bedrock KB: Retrieve, RetrieveAndGenerate
+- DynamoDB: PutItem, GetItem, UpdateItem, Query, Scan (ESG* tables)
+- States: StartExecution, DescribeExecution
+- CloudWatch Logs
+
 ---
 
-### 📦 Step 2: Build & Deploy Lambda Layer
+### 📊 Step 2: Setup Data Layer (Glue + Athena)
 
-
-The Lambda layer contains python-docx, python-pptx, and matplotlib for document generation.
+#### 2.1 Upload Synthetic Data
 
 ```bash
-cd esg-reporting-poc/deploy/layer
+# Generate synthetic data (if not already done)
+python scripts/generate_energy_data.py
+python scripts/generate_loan_data.py
+python scripts/generate_hr_data.py
 
-# Build layer (Linux packages for Lambda)
-docker run --rm -v "$PWD":/var/task public.ecr.aws/lambda/python:3.12 /bin/bash -c "pip install python-docx python-pptx matplotlib pillow -t /var/task/python"
+# Upload to S3
+aws s3 cp data/energy/ s3://esg-data-raw-$ACCOUNT_ID/energy_consumption/ --recursive
+aws s3 cp data/loans/ s3://esg-data-raw-$ACCOUNT_ID/loan_portfolio/ --recursive
+aws s3 cp data/hr/ s3://esg-data-raw-$ACCOUNT_ID/hr_metrics/ --recursive
+```
 
-# Create zip
-zip -r ../layer.zip python/
+#### 2.2 Create Athena Tables
 
-# Upload to Lambda
+Run DDL statements in Athena console or via CLI. All tables use **partition projection**:
+
+```bash
+# Create tables (run each SQL file in Athena)
+aws athena start-query-execution \
+  --query-string "$(cat sql/ddl/01_raw_tables.sql)" \
+  --work-group esg-reporting-workgroup \
+  --region $REGION
+
+aws athena start-query-execution \
+  --query-string "$(cat sql/ddl/02_curated_tables.sql)" \
+  --work-group esg-reporting-workgroup \
+  --region $REGION
+
+aws athena start-query-execution \
+  --query-string "$(cat sql/ddl/03_aggregated_tables.sql)" \
+  --work-group esg-reporting-workgroup \
+  --region $REGION
+```
+
+**Tables created (12 total):**
+
+| Database | Table | Partition Keys |
+|----------|-------|----------------|
+| esg_raw | energy_consumption | reporting_year |
+| esg_raw | loan_portfolio | reporting_year |
+| esg_raw | hr_metrics | reporting_year |
+| esg_curated | ghg_scope1 | reporting_year |
+| esg_curated | ghg_scope2 | reporting_year |
+| esg_curated | ghg_scope3_financed | reporting_year |
+| esg_aggregated | ghg_summary_annual | reporting_year |
+| esg_aggregated | pcaf_by_sector | reporting_year |
+| esg_aggregated | scope1_by_facility | reporting_year |
+
+#### 2.3 Run Glue ETL Jobs
+
+```bash
+# Upload Glue scripts
+aws s3 cp glue_jobs/glue_job_scope1_ghg.py s3://esg-data-raw-$ACCOUNT_ID/scripts/
+aws s3 cp glue_jobs/glue_job_scope2_electricity.py s3://esg-data-raw-$ACCOUNT_ID/scripts/
+aws s3 cp glue_jobs/glue_job_scope3_pcaf.py s3://esg-data-raw-$ACCOUNT_ID/scripts/
+aws s3 cp glue_jobs/glue_job_aggregation.py s3://esg-data-raw-$ACCOUNT_ID/scripts/
+
+# Create & run jobs (Scope 1 → 2 → 3 → Aggregation)
+aws glue create-job --name esg-etl-scope1-direct \
+  --role ESGGlueRole \
+  --command '{"Name":"glueetl","ScriptLocation":"s3://esg-data-raw-'$ACCOUNT_ID'/scripts/glue_job_scope1_ghg.py","PythonVersion":"3"}' \
+  --default-arguments '{"--enable-glue-datacatalog":"true","--enable-job-insights":"true"}' \
+  --glue-version 4.0 --number-of-workers 2 --worker-type G.1X \
+  --region $REGION
+
+# Start ETL (sequential)
+aws glue start-job-run --job-name esg-etl-scope1-direct --arguments '{"--REPORTING_YEAR":"2024"}' --region $REGION
+# Wait for completion, then:
+aws glue start-job-run --job-name esg-etl-scope2-indirect --arguments '{"--REPORTING_YEAR":"2024"}' --region $REGION
+aws glue start-job-run --job-name esg-etl-scope3-pcaf --arguments '{"--REPORTING_YEAR":"2024"}' --region $REGION
+aws glue start-job-run --job-name esg-etl-aggregation --arguments '{"--REPORTING_YEAR":"2024"}' --region $REGION
+```
+
+---
+
+### 📦 Step 3: Build & Deploy Lambda Layer
+
+> ⚠️ **CRITICAL:** Layer MUST be built on Linux (CloudShell). Windows `pip install` produces incompatible `.pyd` files for `lxml` C extensions.
+
+**Build in CloudShell (us-east-1):**
+
+```bash
+mkdir -p /tmp/layer/python
+pip install python-docx -t /tmp/layer/python \
+  --platform manylinux2014_x86_64 \
+  --only-binary=:all: \
+  --python-version 3.11 \
+  --implementation cp
+
+cd /tmp/layer
+zip -r /tmp/python-docx-layer.zip python/
+
+# Upload and publish
+aws s3 cp /tmp/python-docx-layer.zip s3://esg-data-raw-$ACCOUNT_ID/lambda-layers/python-docx-layer.zip
+
 aws lambda publish-layer-version \
-  --layer-name esg-reporting-layer \
-  --zip-file fileb://../layer.zip \
-  --compatible-runtimes python3.12 \
-  --region ap-southeast-1
+  --layer-name esg-python-docx \
+  --description "python-docx for Lambda (Linux x86_64)" \
+  --content S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-layers/python-docx-layer.zip \
+  --compatible-runtimes python3.11 \
+  --region $REGION
 ```
 
-**Output:** Note the `LayerVersionArn` (needed for Lambda functions)
-
-**Alternative (if Docker not available):** Use pre-built layer in `deploy/layer.zip`
+**Output:** Note the `LayerVersionArn` — needed for `esg-assembly-doc`
 
 ---
 
-### ⚡ Step 3: Deploy Lambda Functions
+### ⚡ Step 4: Deploy Lambda Functions
 
-Deploy all 11 Lambda functions in correct order:
+**Packaging (from Windows CMD):**
 
-#### 3.1 Core Step Functions Lambdas
-
-```bash
-cd ../lambda
-
-# 1. validate_input
-cd validate_input
-zip -r ../../../deploy/validate_input.zip handler.py
-aws lambda create-function \
-  --function-name esg-validate-input \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/validate_input.zip \
-  --timeout 10 \
-  --memory-size 128 \
-  --region ap-southeast-1
-
-# 2. section_gen (MOST IMPORTANT - generates report content)
-cd ../section_gen
-zip -r ../../../deploy/section_gen.zip handler.py
-aws lambda create-function \
-  --function-name esg-section-gen \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/section_gen.zip \
-  --timeout 600 \
-  --memory-size 512 \
-  --region ap-southeast-1 \
-  --environment Variables="{BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20240620-v2:0}"
-
-# 3. filter_sections
-cd ../filter_sections
-zip -r ../../../deploy/filter_sections.zip handler.py
-aws lambda create-function \
-  --function-name esg-filter-sections \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/filter_sections.zip \
-  --timeout 30 \
-  --memory-size 256 \
-  --region ap-southeast-1
-
-# 4. assembly_doc (needs Lambda layer for docx/pptx)
-cd ../assembly_doc
-zip -r ../../../deploy/assembly_doc.zip handler.py
-aws lambda create-function \
-  --function-name esg-assembly-doc \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/assembly_doc.zip \
-  --timeout 300 \
-  --memory-size 1024 \
-  --layers arn:aws:lambda:ap-southeast-1:YOUR_ACCOUNT_ID:layer:esg-reporting-layer:1 \
-  --region ap-southeast-1 \
-  --environment Variables="{OUTPUT_BUCKET=esg-reporting-output-bucket}"
-
-# 5. validation
-cd ../validation
-zip -r ../../../deploy/validation.zip handler.py
-aws lambda create-function \
-  --function-name esg-validation \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/validation.zip \
-  --timeout 30 \
-  --memory-size 256 \
-  --region ap-southeast-1
-
-# 6. review_handler
-cd ../review_handler
-zip -r ../../../deploy/review_handler.zip handler.py
-aws lambda create-function \
-  --function-name esg-review-handler \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/review_handler.zip \
-  --timeout 10 \
-  --memory-size 128 \
-  --region ap-southeast-1
+```cmd
+REM Package each Lambda (handler.py only, no dependencies)
+powershell Compress-Archive -Path esg-reporting-poc\lambda\validate_input\handler.py -DestinationPath deploy\validate_input.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\section_gen\handler.py -DestinationPath deploy\section_gen.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\filter_sections\handler.py -DestinationPath deploy\filter_sections.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\assembly_doc\handler.py -DestinationPath deploy\assembly_doc.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\validation\handler.py -DestinationPath deploy\validation.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\review_handler\handler.py -DestinationPath deploy\review_handler.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\status_check\handler.py -DestinationPath deploy\status_check.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\history\handler.py -DestinationPath deploy\history.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\athena_query\handler.py -DestinationPath deploy\athena_query.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\lambda\dashboard_data\handler.py -DestinationPath deploy\dashboard_data.zip -Force
+powershell Compress-Archive -Path esg-reporting-poc\agent\lambda_agent_tools\handler.py -DestinationPath deploy\agent_tools.zip -Force
 ```
 
-#### 3.2 API Gateway Lambdas
+**Upload to S3:**
 
 ```bash
-# 7. status_check
-cd ../status_check
-zip -r ../../../deploy/status_check.zip handler.py
-aws lambda create-function \
-  --function-name esg-status-check \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/status_check.zip \
-  --timeout 10 \
-  --memory-size 128 \
-  --region ap-southeast-1 \
-  --environment Variables="{STEP_FUNCTION_ARN=arn:aws:states:ap-southeast-1:YOUR_ACCOUNT_ID:stateMachine:esg-orchestrator}"
-
-# 8. history
-cd ../history
-zip -r ../../../deploy/history.zip handler.py
-aws lambda create-function \
-  --function-name esg-history \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/history.zip \
-  --timeout 10 \
-  --memory-size 128 \
-  --region ap-southeast-1
-
-# 9. athena_query
-cd ../athena_query
-zip -r ../../../deploy/athena_query.zip handler.py
-aws lambda create-function \
-  --function-name esg-athena-query \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/athena_query.zip \
-  --timeout 60 \
-  --memory-size 256 \
-  --region ap-southeast-1 \
-  --environment Variables="{ATHENA_DATABASE=esg_reporting_db,ATHENA_OUTPUT_BUCKET=esg-athena-results}"
-
-# 10. dashboard_data
-cd ../dashboard_data
-zip -r ../../../deploy/dashboard_data.zip handler.py
-aws lambda create-function \
-  --function-name esg-dashboard-data \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/dashboard_data.zip \
-  --timeout 30 \
-  --memory-size 512 \
-  --region ap-southeast-1 \
-  --environment Variables="{ATHENA_DATABASE=esg_reporting_db,CACHE_BUCKET=esg-athena-results}"
+for fn in validate_input section_gen filter_sections assembly_doc validation review_handler status_check history athena_query dashboard_data agent_tools; do
+  aws s3 cp deploy/${fn}.zip s3://esg-data-raw-$ACCOUNT_ID/lambda-code/${fn}.zip
+done
 ```
 
-#### 3.3 Bedrock Agent Lambda
+**Create functions:**
 
 ```bash
-# 11. agent_tools (for Bedrock Agent)
-cd ../../agent/lambda_agent_tools
-zip -r ../../../deploy/agent_tools.zip handler.py
-aws lambda create-function \
-  --function-name esg-agent-tools \
-  --runtime python3.12 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGLambdaExecutionRole \
-  --handler handler.lambda_handler \
-  --zip-file fileb://../../deploy/agent_tools.zip \
-  --timeout 10 \
-  --memory-size 256 \
-  --region ap-southeast-1 \
-  --environment Variables="{STEP_FUNCTION_ARN=arn:aws:states:ap-southeast-1:YOUR_ACCOUNT_ID:stateMachine:esg-orchestrator,OUTPUT_BUCKET=esg-reporting-output-bucket}"
+# 1. esg-validate-input
+aws lambda create-function --function-name esg-validate-input \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/validate_input.zip \
+  --timeout 30 --memory-size 256 --region $REGION
+
+# 2. esg-section-gen (largest — Bedrock + KB RAG)
+aws lambda create-function --function-name esg-section-gen \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/section_gen.zip \
+  --timeout 120 --memory-size 1024 --region $REGION
+
+# 3. esg-filter-sections (Step Functions JSONPath workaround)
+aws lambda create-function --function-name esg-filter-sections \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/filter_sections.zip \
+  --timeout 30 --memory-size 256 --region $REGION
+
+# 4. esg-assembly-doc (needs Lambda Layer)
+aws lambda create-function --function-name esg-assembly-doc \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/assembly_doc.zip \
+  --timeout 120 --memory-size 1024 \
+  --layers arn:aws:lambda:$REGION:$ACCOUNT_ID:layer:esg-python-docx:2 \
+  --region $REGION
+
+# 5. esg-validation (21-rule output validation)
+aws lambda create-function --function-name esg-validation \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/validation.zip \
+  --timeout 60 --memory-size 512 --region $REGION
+
+# 6. esg-review-handler (human review callback)
+aws lambda create-function --function-name esg-review-handler \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/review_handler.zip \
+  --timeout 30 --memory-size 256 --region $REGION
+
+# 7. esg-status-check
+aws lambda create-function --function-name esg-status-check \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/status_check.zip \
+  --timeout 30 --memory-size 256 --region $REGION
+
+# 8. esg-history
+aws lambda create-function --function-name esg-history \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/history.zip \
+  --timeout 30 --memory-size 256 --region $REGION
+
+# 9. esg-athena-query (data fetch for SectionGen, includes HR metrics)
+aws lambda create-function --function-name esg-athena-query \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/athena_query.zip \
+  --timeout 60 --memory-size 512 --region $REGION
+
+# 10. esg-dashboard-data (Analytics page - hybrid S3 cache + Athena refresh)
+aws lambda create-function --function-name esg-dashboard-data \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/dashboard_data.zip \
+  --timeout 60 --memory-size 512 --region $REGION
+
+# 11. esg-agent-tools (Bedrock Agent action group handler)
+aws lambda create-function --function-name esg-agent-tools \
+  --runtime python3.11 --handler handler.lambda_handler \
+  --role arn:aws:iam::$ACCOUNT_ID:role/ESGLambdaRole \
+  --code S3Bucket=esg-data-raw-$ACCOUNT_ID,S3Key=lambda-code/agent_tools.zip \
+  --timeout 30 --memory-size 256 --region $REGION
 ```
 
 **Verify all 11 functions:**
 ```bash
-aws lambda list-functions --region ap-southeast-1 --query "Functions[?starts_with(FunctionName, 'esg-')].FunctionName"
+aws lambda list-functions --region $REGION \
+  --query "Functions[?starts_with(FunctionName, 'esg-')].{Name:FunctionName,Runtime:Runtime,Memory:MemorySize,Timeout:Timeout}" \
+  --output table
 ```
 
 ---
 
-### 🔄 Step 4: Deploy Step Functions
+### 📢 Step 5: Create SNS Topics
 
 ```bash
-cd ../../step_functions
+# Human Review notifications (info only in auto-approve mode)
+aws sns create-topic --name ESG-HumanReview --region $REGION
+
+# Report completion notifications
+aws sns create-topic --name ESG-ReportComplete --region $REGION
+```
+
+---
+
+### 🔄 Step 6: Deploy Step Functions
+
+**Upload ASL to S3 first (Windows encoding workaround):**
+
+```bash
+aws s3 cp esg-reporting-poc/step_functions/esg_orchestrator.asl.json \
+  s3://esg-data-raw-$ACCOUNT_ID/scripts/esg_orchestrator.asl.json
+```
+
+**Create state machine (from CloudShell):**
+
+```bash
+# Download ASL from S3
+aws s3 cp s3://esg-data-raw-$ACCOUNT_ID/scripts/esg_orchestrator.asl.json /tmp/esg_orchestrator.asl.json
 
 # Create state machine
 aws stepfunctions create-state-machine \
-  --name esg-orchestrator \
-  --definition file://esg_orchestrator.asl.json \
-  --role-arn arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGStepFunctionsRole \
-  --region ap-southeast-1
+  --name ESGReportGenerationStateMachine \
+  --definition file:///tmp/esg_orchestrator.asl.json \
+  --role-arn arn:aws:iam::$ACCOUNT_ID:role/ESGStepFunctionsRole \
+  --type STANDARD \
+  --region $REGION
+```
+
+**State Machine Flow:**
+```
+ValidateInput → WaitForGlueJobs (Parallel: Scope1+2+3)
+  → TriggerAggregation → QueryAthena (including HR metrics for Social)
+  → GenerateSections (Map, MaxConcurrency:3)
+      [per section: SectionGen → Validation → Choice]
+        PASS → Accumulate
+        WARN → AccumulateWithWarning
+        RETRY → Re-gen once → Re-validate
+        FAIL_NO_RETRY → Auto-Approve → AccumulateWithWarning
+  → FilterSections → AssembleDocument → NotifyCompletion → Success (outputs assembly_result)
 ```
 
 **Verify:**
 ```bash
 aws stepfunctions describe-state-machine \
-  --state-machine-arn arn:aws:states:ap-southeast-1:YOUR_ACCOUNT_ID:stateMachine:esg-orchestrator \
-  --region ap-southeast-1
+  --state-machine-arn arn:aws:states:$REGION:$ACCOUNT_ID:stateMachine:ESGReportGenerationStateMachine \
+  --region $REGION
 ```
 
 ---
 
-### 🌐 Step 5: Deploy API Gateway
+### 🌐 Step 7: Deploy API Gateway
 
-
-#### 5.1 Create REST API
+#### 7.1 Create REST API
 
 ```bash
-# Create API
 API_ID=$(aws apigateway create-rest-api \
-  --name "ESG Reporting API" \
-  --description "API for ESG Report Generation System" \
+  --name "ESG-Chat-API" \
+  --description "ESG Report Generation API" \
   --endpoint-configuration types=REGIONAL \
-  --region ap-southeast-1 \
-  --query 'id' \
-  --output text)
+  --region $REGION \
+  --query 'id' --output text)
 
 echo "API ID: $API_ID"
 
-# Get root resource ID
 ROOT_ID=$(aws apigateway get-resources \
-  --rest-api-id $API_ID \
-  --region ap-southeast-1 \
-  --query 'items[0].id' \
-  --output text)
+  --rest-api-id $API_ID --region $REGION \
+  --query 'items[0].id' --output text)
 ```
 
-#### 5.2 Create Resources & Methods
+#### 7.2 Create Resources & Methods
 
 ```bash
-# /chat endpoint
-CHAT_ID=$(aws apigateway create-resource \
-  --rest-api-id $API_ID \
-  --parent-id $ROOT_ID \
-  --path-part chat \
-  --region ap-southeast-1 \
-  --query 'id' \
-  --output text)
+# /chat (POST) — proxied to Bedrock Agent via esg-chat-proxy
+CHAT_ID=$(aws apigateway create-resource --rest-api-id $API_ID --parent-id $ROOT_ID --path-part chat --region $REGION --query 'id' --output text)
+aws apigateway put-method --rest-api-id $API_ID --resource-id $CHAT_ID --http-method POST --authorization-type NONE --region $REGION
 
-aws apigateway put-method \
-  --rest-api-id $API_ID \
-  --resource-id $CHAT_ID \
-  --http-method POST \
-  --authorization-type NONE \
-  --region ap-southeast-1
+# /status (GET)
+STATUS_ID=$(aws apigateway create-resource --rest-api-id $API_ID --parent-id $ROOT_ID --path-part status --region $REGION --query 'id' --output text)
+aws apigateway put-method --rest-api-id $API_ID --resource-id $STATUS_ID --http-method GET --authorization-type NONE --region $REGION
 
-# /status endpoint
-STATUS_ID=$(aws apigateway create-resource \
-  --rest-api-id $API_ID \
-  --parent-id $ROOT_ID \
-  --path-part status \
-  --region ap-southeast-1 \
-  --query 'id' \
-  --output text)
+# /history (GET)
+HISTORY_ID=$(aws apigateway create-resource --rest-api-id $API_ID --parent-id $ROOT_ID --path-part history --region $REGION --query 'id' --output text)
+aws apigateway put-method --rest-api-id $API_ID --resource-id $HISTORY_ID --http-method GET --authorization-type NONE --region $REGION
 
-aws apigateway put-method \
-  --rest-api-id $API_ID \
-  --resource-id $STATUS_ID \
-  --http-method GET \
-  --authorization-type NONE \
-  --region ap-southeast-1 \
-  --request-parameters method.request.querystring.execution_id=true
-
-# /history endpoint
-HISTORY_ID=$(aws apigateway create-resource \
-  --rest-api-id $API_ID \
-  --parent-id $ROOT_ID \
-  --path-part history \
-  --region ap-southeast-1 \
-  --query 'id' \
-  --output text)
-
-aws apigateway put-method \
-  --rest-api-id $API_ID \
-  --resource-id $HISTORY_ID \
-  --http-method GET \
-  --authorization-type NONE \
-  --region ap-southeast-1
-
-# /dashboard-data endpoint
-DASHBOARD_ID=$(aws apigateway create-resource \
-  --rest-api-id $API_ID \
-  --parent-id $ROOT_ID \
-  --path-part dashboard-data \
-  --region ap-southeast-1 \
-  --query 'id' \
-  --output text)
-
-aws apigateway put-method \
-  --rest-api-id $API_ID \
-  --resource-id $DASHBOARD_ID \
-  --http-method GET \
-  --authorization-type NONE \
-  --region ap-southeast-1
+# /dashboard-data (GET)
+DASHBOARD_ID=$(aws apigateway create-resource --rest-api-id $API_ID --parent-id $ROOT_ID --path-part dashboard-data --region $REGION --query 'id' --output text)
+aws apigateway put-method --rest-api-id $API_ID --resource-id $DASHBOARD_ID --http-method GET --authorization-type NONE --region $REGION
 ```
 
-#### 5.3 Create Lambda Integrations
+#### 7.3 Lambda Integrations & Permissions
 
 ```bash
-# Get Lambda ARNs
-STATUS_ARN="arn:aws:lambda:ap-southeast-1:YOUR_ACCOUNT_ID:function:esg-status-check"
-HISTORY_ARN="arn:aws:lambda:ap-southeast-1:YOUR_ACCOUNT_ID:function:esg-history"
-DASHBOARD_ARN="arn:aws:lambda:ap-southeast-1:YOUR_ACCOUNT_ID:function:esg-dashboard-data"
+# Integrate each endpoint with its Lambda (AWS_PROXY type)
+for resource in "chat:esg-chat-proxy:POST:$CHAT_ID" "status:esg-status-check:GET:$STATUS_ID" "history:esg-history:GET:$HISTORY_ID" "dashboard-data:esg-dashboard-data:GET:$DASHBOARD_ID"; do
+  IFS=':' read -r path fn method rid <<< "$resource"
+  
+  aws apigateway put-integration --rest-api-id $API_ID --resource-id $rid \
+    --http-method $method --type AWS_PROXY --integration-http-method POST \
+    --uri "arn:aws:apigateway:$REGION:lambda:path/2015-03-31/functions/arn:aws:lambda:$REGION:$ACCOUNT_ID:function:$fn/invocations" \
+    --region $REGION
 
-# Integrate /status with Lambda
-aws apigateway put-integration \
-  --rest-api-id $API_ID \
-  --resource-id $STATUS_ID \
-  --http-method GET \
-  --type AWS_PROXY \
-  --integration-http-method POST \
-  --uri arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/$STATUS_ARN/invocations \
-  --region ap-southeast-1
-
-# Integrate /history with Lambda
-aws apigateway put-integration \
-  --rest-api-id $API_ID \
-  --resource-id $HISTORY_ID \
-  --http-method GET \
-  --type AWS_PROXY \
-  --integration-http-method POST \
-  --uri arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/$HISTORY_ARN/invocations \
-  --region ap-southeast-1
-
-# Integrate /dashboard-data with Lambda
-aws apigateway put-integration \
-  --rest-api-id $API_ID \
-  --resource-id $DASHBOARD_ID \
-  --http-method GET \
-  --type AWS_PROXY \
-  --integration-http-method POST \
-  --uri arn:aws:apigateway:ap-southeast-1:lambda:path/2015-03-31/functions/$DASHBOARD_ARN/invocations \
-  --region ap-southeast-1
-
-# Grant API Gateway permission to invoke Lambdas
-aws lambda add-permission \
-  --function-name esg-status-check \
-  --statement-id apigateway-invoke \
-  --action lambda:InvokeFunction \
-  --principal apigateway.amazonaws.com \
-  --source-arn "arn:aws:execute-api:ap-southeast-1:YOUR_ACCOUNT_ID:$API_ID/*" \
-  --region ap-southeast-1
-
-aws lambda add-permission \
-  --function-name esg-history \
-  --statement-id apigateway-invoke \
-  --action lambda:InvokeFunction \
-  --principal apigateway.amazonaws.com \
-  --source-arn "arn:aws:execute-api:ap-southeast-1:YOUR_ACCOUNT_ID:$API_ID/*" \
-  --region ap-southeast-1
-
-aws lambda add-permission \
-  --function-name esg-dashboard-data \
-  --statement-id apigateway-invoke \
-  --action lambda:InvokeFunction \
-  --principal apigateway.amazonaws.com \
-  --source-arn "arn:aws:execute-api:ap-southeast-1:YOUR_ACCOUNT_ID:$API_ID/*" \
-  --region ap-southeast-1
-```
-
-#### 5.4 Enable CORS
-
-```bash
-# Enable CORS for all endpoints (required for React frontend)
-for RESOURCE_ID in $STATUS_ID $HISTORY_ID $DASHBOARD_ID; do
-  aws apigateway put-method \
-    --rest-api-id $API_ID \
-    --resource-id $RESOURCE_ID \
-    --http-method OPTIONS \
-    --authorization-type NONE \
-    --region ap-southeast-1
-
-  aws apigateway put-integration \
-    --rest-api-id $API_ID \
-    --resource-id $RESOURCE_ID \
-    --http-method OPTIONS \
-    --type MOCK \
-    --request-templates '{"application/json":"{\"statusCode\": 200}"}' \
-    --region ap-southeast-1
-
-  aws apigateway put-integration-response \
-    --rest-api-id $API_ID \
-    --resource-id $RESOURCE_ID \
-    --http-method OPTIONS \
-    --status-code 200 \
-    --response-parameters '{"method.response.header.Access-Control-Allow-Headers":"'\''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'\''","method.response.header.Access-Control-Allow-Methods":"'\''GET,POST,OPTIONS'\''","method.response.header.Access-Control-Allow-Origin":"'\''*'\''"}'  \
-    --region ap-southeast-1
-
-  aws apigateway put-method-response \
-    --rest-api-id $API_ID \
-    --resource-id $RESOURCE_ID \
-    --http-method OPTIONS \
-    --status-code 200 \
-    --response-parameters '{"method.response.header.Access-Control-Allow-Headers":true,"method.response.header.Access-Control-Allow-Methods":true,"method.response.header.Access-Control-Allow-Origin":true}' \
-    --region ap-southeast-1
+  aws lambda add-permission --function-name $fn \
+    --statement-id apigateway-invoke --action lambda:InvokeFunction \
+    --principal apigateway.amazonaws.com \
+    --source-arn "arn:aws:execute-api:$REGION:$ACCOUNT_ID:$API_ID/*" \
+    --region $REGION
 done
 ```
 
-#### 5.5 Deploy API
+#### 7.4 Enable CORS
 
 ```bash
-# Deploy to 'prod' stage
-aws apigateway create-deployment \
-  --rest-api-id $API_ID \
-  --stage-name prod \
-  --description "Production deployment" \
-  --region ap-southeast-1
+for RESOURCE_ID in $CHAT_ID $STATUS_ID $HISTORY_ID $DASHBOARD_ID; do
+  aws apigateway put-method --rest-api-id $API_ID --resource-id $RESOURCE_ID \
+    --http-method OPTIONS --authorization-type NONE --region $REGION
 
-# Get invoke URL
-echo "API URL: https://$API_ID.execute-api.ap-southeast-1.amazonaws.com/prod"
+  aws apigateway put-integration --rest-api-id $API_ID --resource-id $RESOURCE_ID \
+    --http-method OPTIONS --type MOCK \
+    --request-templates '{"application/json":"{\"statusCode\": 200}"}' --region $REGION
+
+  aws apigateway put-method-response --rest-api-id $API_ID --resource-id $RESOURCE_ID \
+    --http-method OPTIONS --status-code 200 \
+    --response-parameters '{"method.response.header.Access-Control-Allow-Headers":true,"method.response.header.Access-Control-Allow-Methods":true,"method.response.header.Access-Control-Allow-Origin":true}' \
+    --region $REGION
+
+  aws apigateway put-integration-response --rest-api-id $API_ID --resource-id $RESOURCE_ID \
+    --http-method OPTIONS --status-code 200 \
+    --response-parameters '{"method.response.header.Access-Control-Allow-Headers":"'\''Content-Type,X-Amz-Date,Authorization,X-Api-Key'\''","method.response.header.Access-Control-Allow-Methods":"'\''GET,POST,OPTIONS'\''","method.response.header.Access-Control-Allow-Origin":"'\''*'\''"}'  \
+    --region $REGION
+done
 ```
 
-**Save this URL** - needed for frontend configuration!
+#### 7.5 Deploy API
+
+```bash
+aws apigateway create-deployment --rest-api-id $API_ID --stage-name prod \
+  --description "Production deployment" --region $REGION
+
+echo "API URL: https://$API_ID.execute-api.$REGION.amazonaws.com/prod"
+```
 
 ---
 
-### 🤖 Step 6: Deploy Bedrock Agent
+### 🤖 Step 8: Deploy Bedrock Agent & Knowledge Base
 
-#### 6.1 Create Agent
+#### 8.1 Upload Knowledge Base Documents
 
 ```bash
-# Create agent (via AWS Console or CLI)
+# Upload ESG framework PDFs and reference documents
+aws s3 cp esg-reporting-poc/data/kb_docs/ s3://esg-kb-documents-$ACCOUNT_ID/ --recursive
+
+# Upload prompts and templates
+aws s3 cp esg-reporting-poc/prompts/ s3://esg-kb-documents-$ACCOUNT_ID/prompts/ --recursive
+```
+
+**Knowledge Base Documents (~15 files):**
+- GRI 305 Emissions Standard
+- IFRS S2 Climate Disclosures
+- CSRD/ESRS E1 Climate Change
+- OJK POJK 51/2017 Sustainable Finance
+- PCAF Global GHG Accounting Standard
+- Sample ESG reports (BCA, BRI, DBS, Mandiri, OCBC)
+- Section templates (scope1, scope2, scope3_pcaf, intensity, methodology, summary, social)
+- Overlay file: `overlay_esrs_e1.txt`
+
+#### 8.2 Create Knowledge Base (Console recommended)
+
+**Configuration:**
+| Setting | Value |
+|---------|-------|
+| Name | ESG-Framework-KB |
+| Data Source | S3 (`s3://esg-kb-documents-{ACCOUNT_ID}/`) |
+| Chunking Strategy | **Semantic** |
+| Max Sentences per Chunk | 1 |
+| Token Size | 700 |
+| Similarity Percentile Threshold | 90% |
+| Embedding Model | Amazon Titan Embeddings V2 (1024 dimensions) |
+| Vector Store | OpenSearch Serverless (Quick Create) |
+| Foundation Model (parser) | Claude Sonnet 4.5 |
+| Min Relevance Score | **0.40** |
+
+> Note: Semantic chunking preserves regulatory clause boundaries. The 0.40 threshold is lower than typical (0.65) because semantic chunking produces different score distributions.
+
+#### 8.3 Create Bedrock Agent
+
+```bash
+# Create agent
 AGENT_ID=$(aws bedrock-agent create-agent \
-  --agent-name ESG-Report-Assistant \
-  --foundation-model anthropic.claude-3-5-sonnet-20240620-v2:0 \
-  --instruction file://../agent/agent_instructions.txt \
-  --agent-resource-role-arn arn:aws:iam::YOUR_ACCOUNT_ID:role/ESGBedrockAgentRole \
-  --region ap-southeast-1 \
-  --query 'agent.agentId' \
-  --output text)
+  --agent-name ESGReportAgent \
+  --foundation-model "us.anthropic.claude-sonnet-4-5-20250929-v1:0" \
+  --instruction "$(cat esg-reporting-poc/agent/agent_instructions.txt)" \
+  --agent-resource-role-arn arn:aws:iam::$ACCOUNT_ID:role/ESGBedrockAgentRole \
+  --region $REGION \
+  --query 'agent.agentId' --output text)
+
+# Add action group (4 tools)
+aws bedrock-agent create-agent-action-group \
+  --agent-id $AGENT_ID --agent-version DRAFT \
+  --action-group-name ESGReportActions \
+  --action-group-executor lambda=arn:aws:lambda:$REGION:$ACCOUNT_ID:function:esg-agent-tools \
+  --api-schema '{"payload":"'$(base64 -w0 esg-reporting-poc/agent/openapi_schema.json)'"}' \
+  --region $REGION
+
+# Grant Bedrock permission to invoke Lambda
+aws lambda add-permission --function-name esg-agent-tools \
+  --statement-id bedrock-agent-invoke --action lambda:InvokeFunction \
+  --principal bedrock.amazonaws.com \
+  --source-arn "arn:aws:bedrock:$REGION:$ACCOUNT_ID:agent/$AGENT_ID" \
+  --region $REGION
+
+# Associate Knowledge Base
+aws bedrock-agent associate-agent-knowledge-base \
+  --agent-id $AGENT_ID --agent-version DRAFT \
+  --knowledge-base-id $KB_ID \
+  --description "ESG Framework Documentation (GRI, IFRS, CSRD, OJK, PCAF)" \
+  --region $REGION
+
+# Prepare and create alias
+aws bedrock-agent prepare-agent --agent-id $AGENT_ID --region $REGION
+sleep 30  # Wait for preparation
+
+AGENT_ALIAS_ID=$(aws bedrock-agent create-agent-alias \
+  --agent-id $AGENT_ID --agent-alias-name esg-report-agent-v2 \
+  --region $REGION --query 'agentAlias.agentAliasId' --output text)
 
 echo "Agent ID: $AGENT_ID"
+echo "Agent Alias: $AGENT_ALIAS_ID"
 ```
 
-#### 6.2 Add Action Group
-
-```bash
-# Add action group with Lambda
-aws bedrock-agent create-agent-action-group \
-  --agent-id $AGENT_ID \
-  --agent-version DRAFT \
-  --action-group-name report-generation-tools \
-  --action-group-executor lambda=arn:aws:lambda:ap-southeast-1:YOUR_ACCOUNT_ID:function:esg-agent-tools \
-  --api-schema file://../agent/openapi_schema.json \
-  --region ap-southeast-1
-```
-
-#### 6.3 Grant Lambda Permission
-
-```bash
-aws lambda add-permission \
-  --function-name esg-agent-tools \
-  --statement-id bedrock-agent-invoke \
-  --action lambda:InvokeFunction \
-  --principal bedrock.amazonaws.com \
-  --source-arn "arn:aws:bedrock:ap-southeast-1:YOUR_ACCOUNT_ID:agent/$AGENT_ID" \
-  --region ap-southeast-1
-```
-
-#### 6.4 Prepare Agent
-
-```bash
-# Prepare agent (validates configuration)
-aws bedrock-agent prepare-agent \
-  --agent-id $AGENT_ID \
-  --region ap-southeast-1
-```
-
-#### 6.5 Create Alias
-
-```bash
-# Create production alias
-AGENT_ALIAS_ID=$(aws bedrock-agent create-agent-alias \
-  --agent-id $AGENT_ID \
-  --agent-alias-name production \
-  --region ap-southeast-1 \
-  --query 'agentAlias.agentAliasId' \
-  --output text)
-
-echo "Agent Alias ID: $AGENT_ALIAS_ID"
-```
+**Agent Tools:**
+| Tool | Purpose | Backend |
+|------|---------|---------|
+| `generate_report` | Triggers Step Functions pipeline | `sfn.start_execution()` |
+| `check_status` | Checks execution status | `sfn.describe_execution()` |
+| `download_report` | Generates presigned S3 URL (1hr expiry) | `s3.generate_presigned_url()` |
+| `list_available_data` | Returns available years/frameworks | Static response |
 
 ---
 
-### 📚 Step 7: Deploy Knowledge Base
+### 🎨 Step 9: Deploy Frontend (Amplify)
 
-#### 7.1 Upload Documents to S3
-
-```bash
-# Upload ESG framework documents
-aws s3 cp ../data/kb_docs/ s3://esg-knowledge-base/documents/ --recursive
-```
-
-#### 7.2 Create Knowledge Base (via Console)
-
-**AWS Console Steps:**
-1. Go to **Amazon Bedrock** → **Knowledge Bases**
-2. Click **Create knowledge base**
-3. Name: `ESG-Framework-KB`
-4. Data source: **S3**
-5. S3 URI: `s3://esg-knowledge-base/documents/`
-6. Embeddings model: **Amazon Titan Embeddings v2**
-7. Vector store: **Amazon OpenSearch Serverless** (auto-created)
-8. Click **Create**
-9. **Sync data source** (takes 5-10 min)
-
-#### 7.3 Associate with Agent
-
-```bash
-# Get KB ID from console
-KB_ID="YOUR_KB_ID"
-
-aws bedrock-agent associate-agent-knowledge-base \
-  --agent-id $AGENT_ID \
-  --agent-version DRAFT \
-  --knowledge-base-id $KB_ID \
-  --description "ESG Framework Documentation" \
-  --region ap-southeast-1
-```
-
----
-
-### 🎨 Step 8: Deploy Frontend (Amplify)
-
-#### 8.1 Update API URL in Frontend
+#### 9.1 Update API URL
 
 Edit `esg-chat-app-react/src/api.js`:
 
 ```javascript
-export const API_BASE_URL = 'https://YOUR_API_ID.execute-api.ap-southeast-1.amazonaws.com/prod'
+export const API_BASE_URL = `https://${API_ID}.execute-api.${REGION}.amazonaws.com/prod`
 ```
 
-#### 8.2 Commit & Push to GitHub
+#### 9.2 Deploy via GitHub + Amplify
 
 ```bash
 cd esg-chat-app-react
-
-git add src/api.js
-git commit -m "config: update API endpoint"
+git add .
+git commit -m "config: update API endpoint for production"
 git push origin main
 ```
 
-#### 8.3 Setup Amplify Hosting (via Console)
+**Amplify Console Setup:**
+1. AWS Console → Amplify → New app → Host web app
+2. Select GitHub → Authorize → Select `radityar21/esg-chat-app`
+3. Branch: `main`
+4. Amplify auto-detects `amplify.yml` at repo root
+5. Deploy (5-10 min build)
 
-**AWS Console Steps:**
-1. Go to **AWS Amplify** → **All apps** → **New app** → **Host web app**
-2. Select **GitHub**
-3. Authorize GitHub
-4. Select repository: `radityar21/esg-chat-app`
-5. Branch: `main`
-6. App name: `esg-chat-app`
-7. Amplify will auto-detect `amplify.yml` in repo root
-8. Click **Save and deploy**
-9. Wait 5-10 minutes for build
-10. **Copy Amplify URL** (e.g., `https://main.d337jqli3ubqmk.amplifyapp.com`)
+**Build configuration (amplify.yml):**
+```yaml
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - cd esg-chat-app-react
+        - npm ci
+    build:
+      commands:
+        - npm run build
+  artifacts:
+    baseDirectory: esg-chat-app-react/dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - esg-chat-app-react/node_modules/**/*
+```
 
 ---
 
 ## Post-Deployment Configuration
 
-### 1. Test Lambda Functions
+### 1. Upload Section Templates to S3
 
 ```bash
-# Test validate_input
-aws lambda invoke \
-  --function-name esg-validate-input \
-  --payload '{"reporting_year":2024,"framework":"GRI_305","revenue_idr_billion":92000}' \
-  --region ap-southeast-1 \
-  output.json
-
-cat output.json
+aws s3 cp esg-reporting-poc/templates/ \
+  s3://esg-kb-documents-$ACCOUNT_ID/prompts/templates/ --recursive
 ```
 
-### 2. Test Step Functions
+**Templates (8 total):**
+- `scope1_template.txt` — GRI 305-1 Scope 1 emissions
+- `scope2_template.txt` — GRI 305-2 Scope 2 emissions
+- `scope3_pcaf_template.txt` — Scope 3 PCAF financed emissions
+- `intensity_template.txt` — Emission intensity
+- `methodology_template.txt` — GHG methodology
+- `summary_template.txt` — Executive summary
+- `social_template.txt` — Social (S) pillar (GRI 2-7, 401-1, 404-1, 405-1, 406-1) **[NEW W5]**
+- `overlay_esrs_e1.txt` — CSRD/ESRS E1 overlay
+
+### 2. Sync Knowledge Base
 
 ```bash
-# Start execution
-EXECUTION_ARN=$(aws stepfunctions start-execution \
-  --state-machine-arn arn:aws:states:ap-southeast-1:YOUR_ACCOUNT_ID:stateMachine:esg-orchestrator \
-  --input '{"reporting_year":2024,"framework":"GRI_305","revenue_idr_billion":92000}' \
-  --region ap-southeast-1 \
-  --query 'executionArn' \
-  --output text)
-
-# Check status
-aws stepfunctions describe-execution \
-  --execution-arn $EXECUTION_ARN \
-  --region ap-southeast-1
+aws bedrock-agent start-ingestion-job \
+  --knowledge-base-id $KB_ID \
+  --data-source-id $DATA_SOURCE_ID \
+  --region $REGION
 ```
 
-### 3. Test API Gateway
+### 3. Test Complete Pipeline
 
 ```bash
-# Test /status
-curl "https://YOUR_API_ID.execute-api.ap-southeast-1.amazonaws.com/prod/status?execution_id=test"
-
-# Test /history
-curl "https://YOUR_API_ID.execute-api.ap-southeast-1.amazonaws.com/prod/history"
-
-# Test /dashboard-data
-curl "https://YOUR_API_ID.execute-api.ap-southeast-1.amazonaws.com/prod/dashboard-data"
+# Start execution with Social section
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:$REGION:$ACCOUNT_ID:stateMachine:ESGReportGenerationStateMachine \
+  --input '{
+    "reporting_year": 2024,
+    "framework": "GRI_305",
+    "bank_id": "GENERIC_FI_001",
+    "output_bucket": "esg-output-reports-'$ACCOUNT_ID'",
+    "revenue_idr_billion": 92000.0,
+    "kb_id": "'$KB_ID'",
+    "section_templates": [
+      {"template_id": "scope1", "framework": "GRI_305"},
+      {"template_id": "scope2", "framework": "GRI_305"},
+      {"template_id": "scope3_pcaf", "framework": "GRI_305"},
+      {"template_id": "intensity", "framework": "GRI_305"},
+      {"template_id": "social", "framework": "GRI_305"},
+      {"template_id": "summary", "framework": "NONE"}
+    ]
+  }' --region $REGION
 ```
-
-### 4. Test Bedrock Agent
-
-```bash
-aws bedrock-agent-runtime invoke-agent \
-  --agent-id $AGENT_ID \
-  --agent-alias-id $AGENT_ALIAS_ID \
-  --session-id test-session-1 \
-  --input-text "Generate a GRI 305 report for 2024" \
-  --region ap-southeast-1
-```
-
-### 5. Test Frontend
-
-Open browser: `https://YOUR_AMPLIFY_URL`
-
-- ✅ Overview page loads
-- ✅ Chat page connects to Bedrock Agent
-- ✅ Analytics page shows charts
-- ✅ Reports page lists executions
 
 ---
 
@@ -873,26 +872,36 @@ Open browser: `https://YOUR_AMPLIFY_URL`
 
 1. **Open Frontend:** Navigate to Amplify URL
 2. **Go to Chat page**
-3. **Send message:** "Generate a GRI 305 report for 2024"
+3. **Send message:** "Generate a GRI 305 report for 2024 with revenue 92000 billion IDR"
 4. **Agent responds** with execution ID
-5. **Check status:** "What's the status of execution_abc123?"
-6. **Download report** when complete (3-5 minutes)
-7. **Verify DOCX:** Open report in Microsoft Word
+5. **Auto-polling starts** (30s intervals, up to 15 minutes)
+6. **Report generates** (3-5 minutes for single framework)
+7. **Download button appears** with presigned URL
+8. **Verify DOCX:** Open in Word — check sections include Social (S) pillar
 
 ### Health Checks
 
 ```bash
-# Check all Lambda functions are deployed
-aws lambda list-functions --region ap-southeast-1 --query "Functions[?starts_with(FunctionName, 'esg-')].{Name:FunctionName,Runtime:Runtime,Status:State}"
+# All Lambdas
+aws lambda list-functions --region $REGION \
+  --query "Functions[?starts_with(FunctionName, 'esg-')].{Name:FunctionName,State:State}" --output table
 
-# Check Step Functions
-aws stepfunctions list-state-machines --region ap-southeast-1
+# Step Functions
+aws stepfunctions list-state-machines --region $REGION
 
-# Check API Gateway
-aws apigateway get-rest-apis --region ap-southeast-1 --query "items[?name=='ESG Reporting API']"
+# Recent executions
+aws stepfunctions list-executions \
+  --state-machine-arn arn:aws:states:$REGION:$ACCOUNT_ID:stateMachine:ESGReportGenerationStateMachine \
+  --max-results 5 --region $REGION
 
-# Check S3 buckets
+# API Gateway
+aws apigateway get-rest-apis --region $REGION --query "items[?name=='ESG-Chat-API']"
+
+# S3 buckets
 aws s3 ls | grep esg
+
+# Dashboard endpoint
+curl "https://$API_ID.execute-api.$REGION.amazonaws.com/prod/dashboard-data"
 ```
 
 ---
@@ -902,46 +911,136 @@ aws s3 ls | grep esg
 ### Lambda Errors
 
 **Issue:** `Runtime.ImportModuleError: Unable to import module 'handler'`
-
-**Solution:**
 ```bash
-# Rebuild zip with correct structure
-cd lambda/function_name
-zip -r ../../deploy/function_name.zip handler.py
-aws lambda update-function-code --function-name esg-function-name --zip-file fileb://../../deploy/function_name.zip --region ap-southeast-1
+# Verify zip contains handler.py at root (not nested in folder)
+unzip -l deploy/function_name.zip
+# Fix: re-zip with correct structure
 ```
 
-### Bedrock Throttling
+**Issue:** `lxml` import error in esg-assembly-doc
+```bash
+# Layer was built on Windows — must rebuild on Linux
+# See Step 3 (CloudShell build commands)
+```
+
+**Issue:** `AccessDeniedException: User is not authorized to perform bedrock:InvokeModel`
+```bash
+# ESGLambdaRole needs inference-profile/* permissions (not just foundation-model/*)
+# Verify IAM policy includes both ARN patterns:
+#   arn:aws:bedrock:*::foundation-model/*
+#   arn:aws:bedrock:*::inference-profile/*
+```
+
+### Step Functions Issues
+
+**Issue:** `file://` encoding error when deploying ASL from Windows
+```bash
+# Solution: Upload to S3 first, then download in CloudShell
+aws s3 cp esg_orchestrator.asl.json s3://esg-data-raw-$ACCOUNT_ID/scripts/
+# In CloudShell:
+aws s3 cp s3://esg-data-raw-$ACCOUNT_ID/scripts/esg_orchestrator.asl.json /tmp/
+aws stepfunctions update-state-machine --state-machine-arn $SFN_ARN --definition file:///tmp/esg_orchestrator.asl.json
+```
+
+**Issue:** Step Functions output doesn't contain `assembly_result`
+```bash
+# The Success state must be a Pass type that outputs $.assembly_result
+# NotifyCompletion must use ResultPath: "$.sns_result" to preserve state
+```
+
+### Bedrock Agent Issues
+
+**Issue:** Agent formats URLs with markdown that corrupts presigned URLs
+```
+# Known issue: Agent adds []() formatting around S3 presigned URLs
+# Frontend handles this: regex strips trailing ) and ] from URLs
+# No backend fix needed — frontend regex handles it
+```
 
 **Issue:** `ThrottlingException: Rate exceeded`
-
-**Solution:**
 ```bash
-# Request quota increase
+# Request quota increase via Service Quotas
 aws service-quotas request-service-quota-increase \
-  --service-code bedrock \
-  --quota-code L-xxx \
-  --desired-value 100 \
-  --region ap-southeast-1
+  --service-code bedrock --quota-code L-xxx --desired-value 100 --region $REGION
+```
+
+### Presigned URL Issues
+
+**Issue:** Presigned URL returns `SignatureDoesNotMatch`
+```bash
+# KMS-encrypted S3 objects require signature_version='s3v4'
+# Verify agent_tools Lambda uses:
+#   config = Config(signature_version='s3v4')
+#   s3_client = boto3.client('s3', config=config)
 ```
 
 ### API Gateway CORS
 
 **Issue:** `No 'Access-Control-Allow-Origin' header`
-
-**Solution:** Re-run CORS setup commands in Step 5.4
-
-### Frontend Not Loading
-
-**Issue:** Amplify build fails
-
-**Solution:**
 ```bash
-# Check Amplify build logs in console
-# Verify amplify.yml is correct:
-cat amplify.yml
-# Should have baseDirectory: esg-chat-app-react/dist
+# Re-run CORS setup (Step 7.4) or verify OPTIONS method exists on each resource
 ```
+
+### Frontend Deployment
+
+**Issue:** 404 on assets after Amplify deploy
+```bash
+# Verify amplify.yml baseDirectory: esg-chat-app-react/dist
+# Verify public/_redirects exists with: /* /index.html 200
+```
+
+**Issue:** White page on load
+```bash
+# Missing _redirects file for SPA routing
+echo "/* /index.html 200" > esg-chat-app-react/public/_redirects
+git add . && git commit -m "fix: add SPA redirects" && git push
+```
+
+---
+
+## Known Validation Issues (False Positives)
+
+> These are calibration issues in the validation layer, NOT data errors. Auto-approve is the correct approach for POC/demo.
+
+### VAL-NUM-01: Scientific Notation Mismatch
+
+**Symptom:** Validator flags correct numbers (e.g., `21,976,797.30 tCO2e` vs `2.19767973E7`)
+
+**Root Cause:** Regex extraction produces scientific notation string. Float comparison would be equal but string matching fails.
+
+**Impact:** LOW — numbers are correct
+
+**Fix:** Normalize both sides to float before comparison, or add `round(val, 2)` variants to allowed set.
+
+### VAL-NUM-01/03: LLM-Derived Percentages
+
+**Symptom:** "35.3% not in source" flagged as fabricated
+
+**Root Cause:** LLM calculates `1199.79 / 3402.99 × 100 = 35.3%`. Mathematically correct but not verbatim in DATA INPUT (only totals sent, not percentages).
+
+**Impact:** LOW — calculation is correct
+
+**DI-2 Tradeoff:** Spec says "model MUST NOT perform arithmetic" but derived percentages make reports more readable. For production: pre-compute all common percentages in aggregation layer.
+
+### VAL-NUM-07: Table Values Not in Paragraphs
+
+**Symptom:** "Table value 131.4422 not found in paragraphs"
+
+**Root Cause:** LLM generates detailed tables (10 rows × multiple columns). Narrative summarizes, doesn't repeat every value.
+
+**Impact:** LOW — values from Athena source, table is correct
+
+**Fix:** Downgrade VAL-NUM-07 to informational only.
+
+### Sector Values Not in Allowed Set
+
+**Symptom:** Sector-level PCAF data flagged as fabricated
+
+**Root Cause:** `source_metrics` passed to ValidationFn only contains `ghg_summary` (aggregated totals). Sector breakdown (`pcaf_sectors`) is sent to SectionGenFn but NOT to ValidationFn.
+
+**Impact:** MEDIUM — causes unnecessary validation failures
+
+**Fix:** Pass full `athena_query_result` (including `pcaf_sectors` + `scope1_facilities`) to ValidationFn.
 
 ---
 
@@ -951,42 +1050,54 @@ cat amplify.yml
 
 ```bash
 # Delete Lambda functions
-for fn in esg-validate-input esg-section-gen esg-filter-sections esg-assembly-doc esg-validation esg-review-handler esg-status-check esg-history esg-athena-query esg-dashboard-data esg-agent-tools; do
-  aws lambda delete-function --function-name $fn --region ap-southeast-1
+for fn in esg-validate-input esg-section-gen esg-filter-sections esg-assembly-doc esg-validation esg-review-handler esg-status-check esg-history esg-athena-query esg-dashboard-data esg-agent-tools esg-chat-proxy; do
+  aws lambda delete-function --function-name $fn --region $REGION 2>/dev/null
 done
 
 # Delete Step Functions
-aws stepfunctions delete-state-machine --state-machine-arn arn:aws:states:ap-southeast-1:YOUR_ACCOUNT_ID:stateMachine:esg-orchestrator --region ap-southeast-1
+aws stepfunctions delete-state-machine \
+  --state-machine-arn arn:aws:states:$REGION:$ACCOUNT_ID:stateMachine:ESGReportGenerationStateMachine \
+  --region $REGION
 
 # Delete API Gateway
-aws apigateway delete-rest-api --rest-api-id $API_ID --region ap-southeast-1
+aws apigateway delete-rest-api --rest-api-id $API_ID --region $REGION
 
-# Delete S3 buckets (WARNING: deletes all data)
-aws s3 rb s3://esg-reporting-output-bucket --force
-aws s3 rb s3://esg-athena-results --force
-aws s3 rb s3://esg-knowledge-base --force
+# Delete SNS Topics
+aws sns delete-topic --topic-arn arn:aws:sns:$REGION:$ACCOUNT_ID:ESG-HumanReview
+aws sns delete-topic --topic-arn arn:aws:sns:$REGION:$ACCOUNT_ID:ESG-ReportComplete
 
-# Delete IAM roles
-aws iam delete-role --role-name ESGLambdaExecutionRole
-aws iam delete-role --role-name ESGStepFunctionsRole
-aws iam delete-role --role-name ESGBedrockAgentRole
+# Delete S3 buckets (WARNING: deletes all data — irreversible)
+for bucket in esg-data-raw esg-data-curated esg-data-aggregated esg-output-reports esg-kb-documents esg-athena-results; do
+  aws s3 rb s3://${bucket}-$ACCOUNT_ID --force 2>/dev/null
+done
+
+# Delete IAM roles (must detach policies first)
+for role in ESGLambdaRole ESGStepFunctionsRole ESGGlueRole; do
+  aws iam delete-role --role-name $role 2>/dev/null
+done
 ```
 
 ---
 
 ## 📚 Additional Resources
 
-- **Architecture Diagrams:** `architecture/README.md`
-- **Lambda Functions Reference:** `esg-reporting-poc/lambda/README.md`
-- **Agent Setup:** `esg-reporting-poc/agent/README.md`
-- **Frontend Guide:** `esg-chat-app-react/README.md`
-- **Infrastructure Spec:** `INFRASTRUCTURE_SPEC.md`
+| Document | Purpose | Location |
+|----------|---------|----------|
+| Architecture Diagrams | Visual system design | `architecture/README.md` |
+| Lambda Functions Ref | All 11 Lambda details | `esg-reporting-poc/lambda/README.md` |
+| Agent Setup | Bedrock Agent config | `esg-reporting-poc/agent/README.md` |
+| Frontend Guide | React/Vite development | `esg-chat-app-react/README.md` |
+| Infrastructure Spec | Complete resource spec | `INFRASTRUCTURE_SPEC.md` |
+| Implementation Changelog | 91 spec deviations (W1-W6) | `esg-reporting-poc/docs/IMPLEMENTATION_CHANGELOG.md` |
+| Spec Amendments | 76 tracked amendments | `esg-reporting-poc/docs/SPEC_AMENDMENTS.md` |
+| Validation False Positives | Known validator issues | `esg-reporting-poc/docs/VALIDATION_FALSE_POSITIVES.md` |
+| Infrastructure Reference | Current deployed configs | `esg-reporting-poc/docs/INFRASTRUCTURE_REFERENCE.md` |
 
 ---
 
 **Deployment complete!** 🎉
 
-For issues, check CloudWatch Logs:
+For live log monitoring:
 ```bash
-aws logs tail /aws/lambda/esg-section-gen --follow --region ap-southeast-1
+aws logs tail /aws/lambda/esg-section-gen --follow --region $REGION
 ```

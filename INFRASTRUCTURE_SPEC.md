@@ -1,9 +1,10 @@
 # ESG Reporting System - Infrastructure Specification
 
 **Tokaicom Mitra Indonesia (Tokai Group)**  
-**Version:** 1.0  
+**Version:** 1.1  
 **Last Updated:** June 15, 2026  
-**Region:** ap-southeast-1 (Singapore)
+**Region:** us-east-1 (N. Virginia) — current POC deployment  
+**Crosschecked against:** IMPLEMENTATION_CHANGELOG (91 deviations), INFRASTRUCTURE_REFERENCE, SPEC_AMENDMENTS (76 items), VALIDATION_FALSE_POSITIVES
 
 ---
 
@@ -21,51 +22,81 @@
 10. [Network & Security](#network--security)
 11. [Monitoring & Logging](#monitoring--logging)
 12. [Cost Analysis](#cost-analysis)
+13. [Known Issues & Validation False Positives](#known-issues--validation-false-positives)
+14. [Disaster Recovery](#disaster-recovery)
+15. [Performance Benchmarks](#performance-benchmarks)
 
 ---
 
 ## Infrastructure Overview
 
+### AWS Account
+
+| Property | Value |
+|----------|-------|
+| Account ID | `061039769766` |
+| Region | `us-east-1` (N. Virginia) |
+| Environment | POC |
+| Tags | `Project=ESG`, `Env=POC`, `Team=Sustainability` |
+
+### Region Decision
+
+| Option | Region | Status | Notes |
+|--------|--------|--------|-------|
+| Current (POC) | us-east-1 | ✅ Active | CloudShell available, all Bedrock models accessible |
+| Target (Prod) | ap-southeast-1 | 🔄 Future | Low latency for Indonesia, data residency compliance |
+| Original Spec | ap-southeast-3 (Jakarta) | ❌ Rejected | CloudShell unavailable, limited Bedrock models |
+
 ### Complete Resource List
 
 | Resource Type | Name | Purpose | Dependencies |
 |--------------|------|---------|--------------|
-| **IAM Role** | ESGLambdaExecutionRole | Lambda execution | - |
+| **IAM Role** | ESGGlueRole | Glue ETL jobs | - |
+| **IAM Role** | ESGLambdaRole | All Lambda functions (single role, POC) | - |
 | **IAM Role** | ESGStepFunctionsRole | Step Functions execution | - |
-| **IAM Role** | ESGBedrockAgentRole | Bedrock Agent execution | - |
-| **IAM Role** | ESGAPIGatewayRole | API Gateway logging | - |
-| **IAM Role** | ESGGlueETLRole | Glue ETL jobs | - |
-| **Lambda** | esg-validate-input | Input validation | ESGLambdaExecutionRole |
-| **Lambda** | esg-section-gen | Report section generation | ESGLambdaExecutionRole, Bedrock |
-| **Lambda** | esg-filter-sections | Section filtering | ESGLambdaExecutionRole |
-| **Lambda** | esg-assembly-doc | DOCX/PPTX assembly | ESGLambdaExecutionRole, Layer |
-| **Lambda** | esg-validation | Report validation | ESGLambdaExecutionRole |
-| **Lambda** | esg-review-handler | Human review callback | ESGLambdaExecutionRole |
-| **Lambda** | esg-status-check | Execution status check | ESGLambdaExecutionRole, Step Functions |
-| **Lambda** | esg-history | Execution history | ESGLambdaExecutionRole, Step Functions |
-| **Lambda** | esg-athena-query | Athena query execution | ESGLambdaExecutionRole, Athena |
-| **Lambda** | esg-dashboard-data | Dashboard analytics | ESGLambdaExecutionRole, Athena |
-| **Lambda** | esg-agent-tools | Bedrock Agent tools | ESGLambdaExecutionRole, Step Functions |
-| **Lambda Layer** | esg-reporting-layer | python-docx, python-pptx, matplotlib | - |
-| **Step Functions** | esg-orchestrator | Report generation orchestration | ESGStepFunctionsRole, 6 Lambdas |
-| **API Gateway** | ESG Reporting API | REST API endpoints | 4 Lambdas |
-| **Bedrock Agent** | ESG-Report-Assistant | Chat assistant | ESGBedrockAgentRole, esg-agent-tools |
-| **Bedrock KB** | ESG-Framework-KB | ESG framework docs | S3, OpenSearch Serverless |
-| **S3 Bucket** | esg-reporting-output-bucket | DOCX/PPTX reports | - |
-| **S3 Bucket** | esg-athena-results | Athena results + cache | - |
-| **S3 Bucket** | esg-knowledge-base | ESG framework documents | - |
-| **Glue Database** | esg_reporting_db | Athena table metadata | - |
-| **Amplify App** | esg-chat-app | React frontend hosting | API Gateway |
+| **S3 Bucket** | esg-data-raw-061039769766 | Raw zone — source data as ingested | - |
+| **S3 Bucket** | esg-data-curated-061039769766 | Curated zone — ETL-computed GHG | - |
+| **S3 Bucket** | esg-data-aggregated-061039769766 | Aggregated zone — report-ready metrics | - |
+| **S3 Bucket** | esg-output-reports-061039769766 | Generated DOCX reports | - |
+| **S3 Bucket** | esg-kb-documents-061039769766 | Knowledge Base documents + prompts | - |
+| **S3 Bucket** | esg-athena-results-061039769766 | Athena query results | - |
+| **Lambda** | esg-validate-input | Input validation (REQ-SFN-03) | ESGLambdaRole |
+| **Lambda** | esg-athena-query | Single-call Athena data fetch (incl. HR) | ESGLambdaRole, Athena |
+| **Lambda** | esg-section-gen | AI section generation (Bedrock + KB RAG) | ESGLambdaRole, Bedrock, KB |
+| **Lambda** | esg-filter-sections | Section filtering (SFN JSONPath workaround) | ESGLambdaRole |
+| **Lambda** | esg-validation | 21-rule output validation (§7) | ESGLambdaRole |
+| **Lambda** | esg-review-handler | Human review callback (blocked by SCP) | ESGLambdaRole |
+| **Lambda** | esg-assembly-doc | DOCX assembly (§8) | ESGLambdaRole, Layer |
+| **Lambda** | esg-status-check | Execution status API | ESGLambdaRole, SFN |
+| **Lambda** | esg-history | Execution history API | ESGLambdaRole, SFN |
+| **Lambda** | esg-dashboard-data | Analytics dashboard data (S3 cache + Athena) | ESGLambdaRole, Athena |
+| **Lambda** | esg-agent-tools | Bedrock Agent action group (4 tools) | ESGLambdaRole, SFN, S3 |
+| **Lambda** | esg-chat-proxy | API GW → Bedrock Agent proxy | ESGLambdaRole, Bedrock |
+| **Lambda Layer** | esg-python-docx:2 | python-docx + lxml (Linux x86_64) | - |
+| **Step Functions** | ESGReportGenerationStateMachine | Report generation orchestration | ESGStepFunctionsRole |
+| **API Gateway** | ESG-Chat-API (olj4tuggm1) | REST API (4 endpoints) | Lambdas |
+| **Bedrock Agent** | ESGReportAgent (MBERNIQMBG) | Chat assistant | ESGBedrockAgentRole |
+| **Bedrock KB** | ESG-Framework-KB (WVREXI1LEI) | ESG framework docs (RAG) | S3, OpenSearch Serverless |
+| **SNS Topic** | ESG-HumanReview | Validation failure notifications | - |
+| **SNS Topic** | ESG-ReportComplete | Report completion notifications | - |
+| **Glue Job** | esg-etl-scope1-direct | Scope 1 GHG calculation | ESGGlueRole, S3 |
+| **Glue Job** | esg-etl-scope2-indirect | Scope 2 GHG calculation | ESGGlueRole, S3 |
+| **Glue Job** | esg-etl-scope3-pcaf | Scope 3 PCAF calculation | ESGGlueRole, S3 |
+| **Glue Job** | esg-etl-aggregation | Annual aggregation | ESGGlueRole, S3 |
+| **Glue Database** | esg_raw | Raw data tables | - |
+| **Glue Database** | esg_curated | ETL-processed data | - |
+| **Glue Database** | esg_aggregated | Report-ready aggregations | - |
+| **Amplify App** | esg-reporting-dashboard (d337jqli3ubqmk) | React frontend | API Gateway |
 
-**Total Resources:** 32
+**Total Resources:** ~40
 
 ---
 
 ## IAM Roles & Policies
 
-### 1. ESGLambdaExecutionRole
+> Note: POC uses single `ESGLambdaRole` for all functions. Production should use separate roles per function (per spec §11).
 
-**Purpose:** Execution role for all 11 Lambda functions
+### 1. ESGLambdaRole (Single Role for All Lambdas — POC)
 
 **Trust Policy:**
 ```json
@@ -82,7 +113,7 @@
 **Managed Policies:**
 - `arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole`
 
-**Inline Policy** (`ESGLambdaCustomPolicy`):
+**Inline Policy — ESGLambdaAccess:**
 ```json
 {
   "Version": "2012-10-17",
@@ -94,15 +125,23 @@
         "s3:GetObject",
         "s3:PutObject",
         "s3:ListBucket",
-        "s3:DeleteObject"
+        "s3:DeleteObject",
+        "s3:GetBucketLocation",
+        "s3:PutObjectTagging"
       ],
       "Resource": [
-        "arn:aws:s3:::esg-reporting-output-bucket",
-        "arn:aws:s3:::esg-reporting-output-bucket/*",
-        "arn:aws:s3:::esg-athena-results",
-        "arn:aws:s3:::esg-athena-results/*",
-        "arn:aws:s3:::esg-knowledge-base",
-        "arn:aws:s3:::esg-knowledge-base/*"
+        "arn:aws:s3:::esg-data-raw-061039769766",
+        "arn:aws:s3:::esg-data-raw-061039769766/*",
+        "arn:aws:s3:::esg-data-curated-061039769766",
+        "arn:aws:s3:::esg-data-curated-061039769766/*",
+        "arn:aws:s3:::esg-data-aggregated-061039769766",
+        "arn:aws:s3:::esg-data-aggregated-061039769766/*",
+        "arn:aws:s3:::esg-output-reports-061039769766",
+        "arn:aws:s3:::esg-output-reports-061039769766/*",
+        "arn:aws:s3:::esg-kb-documents-061039769766",
+        "arn:aws:s3:::esg-kb-documents-061039769766/*",
+        "arn:aws:s3:::esg-athena-results-061039769766",
+        "arn:aws:s3:::esg-athena-results-061039769766/*"
       ]
     },
     {
@@ -112,7 +151,25 @@
         "bedrock:InvokeModel",
         "bedrock:InvokeModelWithResponseStream"
       ],
-      "Resource": "arn:aws:bedrock:ap-southeast-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v2:0"
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/*",
+        "arn:aws:bedrock:*::inference-profile/*"
+      ]
+    },
+    {
+      "Sid": "BedrockKnowledgeBase",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:Retrieve",
+        "bedrock:RetrieveAndGenerate"
+      ],
+      "Resource": "arn:aws:bedrock:us-east-1:061039769766:knowledge-base/*"
+    },
+    {
+      "Sid": "BedrockAgent",
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeAgent",
+      "Resource": "arn:aws:bedrock:us-east-1:061039769766:agent-alias/*"
     },
     {
       "Sid": "AthenaAccess",
@@ -123,10 +180,10 @@
         "athena:GetQueryResults",
         "athena:StopQueryExecution"
       ],
-      "Resource": "arn:aws:athena:ap-southeast-1:ACCOUNT_ID:workgroup/primary"
+      "Resource": "arn:aws:athena:us-east-1:061039769766:workgroup/esg-reporting-workgroup"
     },
     {
-      "Sid": "GlueDataCatalogAccess",
+      "Sid": "GlueDataCatalog",
       "Effect": "Allow",
       "Action": [
         "glue:GetTable",
@@ -136,9 +193,13 @@
         "glue:GetPartitions"
       ],
       "Resource": [
-        "arn:aws:glue:ap-southeast-1:ACCOUNT_ID:catalog",
-        "arn:aws:glue:ap-southeast-1:ACCOUNT_ID:database/esg_reporting_db",
-        "arn:aws:glue:ap-southeast-1:ACCOUNT_ID:table/esg_reporting_db/*"
+        "arn:aws:glue:us-east-1:061039769766:catalog",
+        "arn:aws:glue:us-east-1:061039769766:database/esg_raw",
+        "arn:aws:glue:us-east-1:061039769766:database/esg_curated",
+        "arn:aws:glue:us-east-1:061039769766:database/esg_aggregated",
+        "arn:aws:glue:us-east-1:061039769766:table/esg_raw/*",
+        "arn:aws:glue:us-east-1:061039769766:table/esg_curated/*",
+        "arn:aws:glue:us-east-1:061039769766:table/esg_aggregated/*"
       ]
     },
     {
@@ -151,9 +212,21 @@
         "states:ListExecutions"
       ],
       "Resource": [
-        "arn:aws:states:ap-southeast-1:ACCOUNT_ID:stateMachine:esg-orchestrator",
-        "arn:aws:states:ap-southeast-1:ACCOUNT_ID:execution:esg-orchestrator:*"
+        "arn:aws:states:us-east-1:061039769766:stateMachine:ESGReportGenerationStateMachine",
+        "arn:aws:states:us-east-1:061039769766:execution:ESGReportGenerationStateMachine:*"
       ]
+    },
+    {
+      "Sid": "DynamoDBAccess",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:061039769766:table/ESG*"
     }
   ]
 }
@@ -162,8 +235,6 @@
 ---
 
 ### 2. ESGStepFunctionsRole
-
-**Purpose:** Execution role for Step Functions state machine
 
 **Trust Policy:**
 ```json
@@ -177,7 +248,7 @@
 }
 ```
 
-**Inline Policy** (`ESGStepFunctionsPolicy`):
+**Inline Policy:**
 ```json
 {
   "Version": "2012-10-17",
@@ -186,14 +257,22 @@
       "Sid": "LambdaInvoke",
       "Effect": "Allow",
       "Action": "lambda:InvokeFunction",
-      "Resource": [
-        "arn:aws:lambda:ap-southeast-1:ACCOUNT_ID:function:esg-validate-input",
-        "arn:aws:lambda:ap-southeast-1:ACCOUNT_ID:function:esg-section-gen",
-        "arn:aws:lambda:ap-southeast-1:ACCOUNT_ID:function:esg-filter-sections",
-        "arn:aws:lambda:ap-southeast-1:ACCOUNT_ID:function:esg-assembly-doc",
-        "arn:aws:lambda:ap-southeast-1:ACCOUNT_ID:function:esg-validation",
-        "arn:aws:lambda:ap-southeast-1:ACCOUNT_ID:function:esg-review-handler"
-      ]
+      "Resource": "arn:aws:lambda:us-east-1:061039769766:function:esg-*"
+    },
+    {
+      "Sid": "SNSPublish",
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "arn:aws:sns:us-east-1:061039769766:ESG-*"
+    },
+    {
+      "Sid": "GlueJobs",
+      "Effect": "Allow",
+      "Action": [
+        "glue:StartJobRun",
+        "glue:GetJobRun"
+      ],
+      "Resource": "arn:aws:glue:us-east-1:061039769766:job/esg-*"
     },
     {
       "Sid": "CloudWatchLogs",
@@ -216,83 +295,7 @@
 
 ---
 
-### 3. ESGBedrockAgentRole
-
-**Purpose:** Execution role for Bedrock Agent
-
-**Trust Policy:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Service": "bedrock.amazonaws.com"},
-    "Action": "sts:AssumeRole",
-    "Condition": {
-      "StringEquals": {
-        "aws:SourceAccount": "ACCOUNT_ID"
-      },
-      "ArnLike": {
-        "aws:SourceArn": "arn:aws:bedrock:ap-southeast-1:ACCOUNT_ID:agent/*"
-      }
-    }
-  }]
-}
-```
-
-**Inline Policy** (`ESGBedrockAgentPolicy`):
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "BedrockInvokeModel",
-      "Effect": "Allow",
-      "Action": "bedrock:InvokeModel",
-      "Resource": "arn:aws:bedrock:ap-southeast-1::foundation-model/anthropic.claude-3-5-sonnet-20240620-v2:0"
-    },
-    {
-      "Sid": "BedrockKnowledgeBaseRetrieval",
-      "Effect": "Allow",
-      "Action": "bedrock:Retrieve",
-      "Resource": "arn:aws:bedrock:ap-southeast-1:ACCOUNT_ID:knowledge-base/*"
-    },
-    {
-      "Sid": "LambdaInvokeAgentTools",
-      "Effect": "Allow",
-      "Action": "lambda:InvokeFunction",
-      "Resource": "arn:aws:lambda:ap-southeast-1:ACCOUNT_ID:function:esg-agent-tools"
-    }
-  ]
-}
-```
-
----
-
-### 4. ESGAPIGatewayRole
-
-**Purpose:** CloudWatch Logs access for API Gateway
-
-**Trust Policy:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": {"Service": "apigateway.amazonaws.com"},
-    "Action": "sts:AssumeRole"
-  }]
-}
-```
-
-**Managed Policies:**
-- `arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs`
-
----
-
-### 5. ESGGlueETLRole
-
-**Purpose:** Execution role for Glue ETL jobs (optional)
+### 3. ESGGlueRole
 
 **Trust Policy:**
 ```json
@@ -309,612 +312,460 @@
 **Managed Policies:**
 - `arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole`
 
-**Inline Policy** (`ESGGlueS3Access`):
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": [
-      "s3:GetObject",
-      "s3:PutObject",
-      "s3:DeleteObject",
-      "s3:ListBucket"
-    ],
-    "Resource": [
-      "arn:aws:s3:::esg-reporting-output-bucket",
-      "arn:aws:s3:::esg-reporting-output-bucket/*",
-      "arn:aws:s3:::esg-athena-results",
-      "arn:aws:s3:::esg-athena-results/*"
-    ]
-  }]
-}
-```
+**Inline Policy — S3 access for raw, curated, aggregated buckets + CloudWatch Logs**
 
 ---
 
 ## Lambda Functions
 
-### Function Specifications Table
+### Function Specifications (Actual Deployed)
 
-| Function Name | Runtime | Memory | Timeout | Layer | Environment Variables |
-|--------------|---------|--------|---------|-------|----------------------|
-| esg-validate-input | Python 3.12 | 128 MB | 10s | No | - |
-| esg-section-gen | Python 3.12 | 512 MB | 600s | No | BEDROCK_MODEL_ID |
-| esg-filter-sections | Python 3.12 | 256 MB | 30s | No | - |
-| esg-assembly-doc | Python 3.12 | 1024 MB | 300s | Yes | OUTPUT_BUCKET |
-| esg-validation | Python 3.12 | 256 MB | 30s | No | - |
-| esg-review-handler | Python 3.12 | 128 MB | 10s | No | - |
-| esg-status-check | Python 3.12 | 128 MB | 10s | No | STEP_FUNCTION_ARN |
-| esg-history | Python 3.12 | 128 MB | 10s | No | - |
-| esg-athena-query | Python 3.12 | 256 MB | 60s | No | ATHENA_DATABASE, ATHENA_OUTPUT_BUCKET |
-| esg-dashboard-data | Python 3.12 | 512 MB | 30s | No | ATHENA_DATABASE, CACHE_BUCKET |
-| esg-agent-tools | Python 3.12 | 256 MB | 10s | No | STEP_FUNCTION_ARN, OUTPUT_BUCKET |
+| Function Name | Runtime | Memory | Timeout | Layer | Key Dependencies |
+|--------------|---------|--------|---------|-------|-----------------|
+| esg-validate-input | Python 3.11 | 256 MB | 30s | No | — |
+| esg-athena-query | Python 3.11 | 512 MB | 60s | No | Athena (5 queries incl. HR metrics) |
+| esg-section-gen | Python 3.11 | 1024 MB | 120s | No | Bedrock Claude 4.5, KB RAG |
+| esg-filter-sections | Python 3.11 | 256 MB | 30s | No | — |
+| esg-validation | Python 3.11 | 512 MB | 60s | No | 21 validation rules |
+| esg-review-handler | Python 3.11 | 256 MB | 30s | No | Function URL (blocked by SCP) |
+| esg-assembly-doc | Python 3.11 | 1024 MB | 120s | esg-python-docx:2 | python-docx, lxml |
+| esg-status-check | Python 3.11 | 256 MB | 30s | No | Step Functions API |
+| esg-history | Python 3.11 | 256 MB | 30s | No | Step Functions API |
+| esg-dashboard-data | Python 3.11 | 512 MB | 60s | No | Athena + S3 cache |
+| esg-agent-tools | Python 3.11 | 256 MB | 30s | No | SFN + S3 presigned URLs |
+| esg-chat-proxy | Python 3.11 | 256 MB | 30s | No | bedrock:InvokeAgent |
 
-###
- Detailed Lambda Configurations
+### Key Lambda Details
 
-#### 1. esg-validate-input
+#### esg-athena-query (Data Layer)
 
-**Purpose:** Validates report generation request parameters
+Executes 5 Athena queries and returns consolidated data:
 
-**Configuration:**
-```json
-{
-  "FunctionName": "esg-validate-input",
-  "Runtime": "python3.12",
-  "Role": "arn:aws:iam::ACCOUNT_ID:role/ESGLambdaExecutionRole",
-  "Handler": "handler.lambda_handler",
-  "Timeout": 10,
-  "MemorySize": 128
-}
-```
+| Query | Source Table | Purpose |
+|-------|-------------|---------|
+| QUERY_GHG_SUMMARY | esg_aggregated.ghg_summary_annual | Scope 1/2/3 totals, intensity, natgas/diesel breakdown |
+| QUERY_PRIOR_YEAR | esg_aggregated.ghg_summary_annual | Prior year for YoY comparison |
+| QUERY_PCAF_SECTORS | esg_aggregated.pcaf_by_sector | Financed emissions by sector |
+| QUERY_SCOPE1_FACILITIES | esg_aggregated.scope1_by_facility | Top 10 emitting facilities |
+| QUERY_HR_METRICS | esg_raw.hr_metrics | Workforce data (Social pillar) |
 
-**Input:**
-```json
-{
-  "reporting_year": 2024,
-  "framework": "GRI_305",
-  "revenue_idr_billion": 92000
-}
-```
+**HR Metrics pre-computation:**
+- `hiring_rate_pct` = new_hires / fte_total × 100
+- `female_headcount` = fte_total × female_pct / 100
+- `male_headcount` = fte_total - female_headcount
+- YoY changes: headcount, turnover, training hours, female %, mgmt female %
 
-**Output:** Same as input (if valid), raises exception if invalid
+#### esg-section-gen (Report Generation)
 
----
+**Model:** `us.anthropic.claude-sonnet-4-5-20250929-v1:0` (cross-region inference profile)
 
-#### 2. esg-section-gen
+**TEMPLATE_MAP (8 sections):**
+| Template Key | Template File | RAG Query |
+|-------------|---------------|-----------|
+| scope1 | templates/scope1_template.txt | GRI 305-1 direct Scope 1 emissions |
+| scope2 | templates/scope2_template.txt | GRI 305-2 indirect Scope 2 emissions |
+| scope3_pcaf | templates/scope3_pcaf_template.txt | Scope 3 PCAF financed emissions |
+| intensity | templates/intensity_template.txt | GHG emission intensity |
+| methodology | templates/methodology_template.txt | GHG accounting methodology |
+| summary | templates/summary_template.txt | Executive summary |
+| social | templates/social_template.txt | **[W5]** GRI 2-7, 401-1, 404-1, 405-1, 406-1 |
+| (framework-specific) | Various overlays | CSRD ESRS E1, OJK PSPK, etc. |
 
-**Purpose:** Generates individual report sections using Bedrock
+**Knowledge Base RAG:**
+- KB ID: `WVREXI1LEI`
+- Filter: `orAll` for cross-framework sections (e.g., scope3_pcaf → GRI_305 + PCAF)
+- Token cap: 700 chars
+- Min relevance: 0.40
 
-**Configuration:**
-```json
-{
-  "FunctionName": "esg-section-gen",
-  "Runtime": "python3.12",
-  "Role": "arn:aws:iam::ACCOUNT_ID:role/ESGLambdaExecutionRole",
-  "Handler": "handler.lambda_handler",
-  "Timeout": 600,
-  "MemorySize": 512,
-  "Environment": {
-    "Variables": {
-      "BEDROCK_MODEL_ID": "anthropic.claude-3-5-sonnet-20240620-v2:0"
-    }
-  }
-}
-```
+#### esg-assembly-doc (Document Generation)
 
-**Input:**
-```json
-{
-  "section_id": "GRI_305_SCOPE1",
-  "reporting_year": 2024,
-  "framework": "GRI_305",
-  "revenue_idr_billion": 92000
-}
-```
+**SECTION_ORDER per framework:**
+- GRI_305: scope1, scope2, scope3_pcaf, intensity, **social**, methodology, summary
+- IFRS_S2: governance, strategy_risks, metrics, pcaf, intensity, **social**, summary
+- CSRD_ESRS_E1: climate_strategy, metrics, pcaf, intensity, **social**, methodology, summary
+- OJK_PSPK: ghg_inventory, pcaf, intensity, **social**, methodology, summary
+- MULTI_FRAMEWORK: All sections from all frameworks
 
-**Output:**
-```json
-{
-  "section_id": "GRI_305_SCOPE1",
-  "section_content": "# GRI 305-1: Direct (Scope 1) GHG Emissions...",
-  "metadata": {
-    "tokens_used": 1234,
-    "generation_time_seconds": 45.2
-  }
-}
-```
+**Document styling:**
+- Font: Arial 11pt body, Arial Bold headings
+- Colors: H1=#1B3A6B, H2=#3D6094
+- Paper: A4 (8.27×11.69 inches)
+- Alignment: Justified
+- KMS encryption on S3 upload
+- 8 S3 object tags per REQ-TRACE-05
+- GRI Content Index: 10 rows (5 environmental + 5 social)
 
----
+#### esg-dashboard-data (Analytics)
 
-#### 3. esg-assembly-doc
+**Endpoint:** `GET /dashboard-data` (optional `?refresh=true`)
+- Default: Read from S3 cache (`dashboard-cache/latest.json`) — $0 cost
+- Refresh: Query Athena → update S3 → return fresh data — ~$0.01
+- 5 queries: GHG summary, prior year, PCAF sectors, Scope 1 facilities, HR metrics
+- Response: `{reporting_year, last_updated, ghg_summary, prior_year_summary, pcaf_sectors, scope1_facilities, hr_metrics}`
 
-**Purpose:** Assembles DOCX and PPTX reports from generated sections
+### Lambda Layer: esg-python-docx
 
-**Configuration:**
-```json
-{
-  "FunctionName": "esg-assembly-doc",
-  "Runtime": "python3.12",
-  "Role": "arn:aws:iam::ACCOUNT_ID:role/ESGLambdaExecutionRole",
-  "Handler": "handler.lambda_handler",
-  "Timeout": 300,
-  "MemorySize": 1024,
-  "Layers": [
-    "arn:aws:lambda:ap-southeast-1:ACCOUNT_ID:layer:esg-reporting-layer:1"
-  ],
-  "Environment": {
-    "Variables": {
-      "OUTPUT_BUCKET": "esg-reporting-output-bucket"
-    }
-  }
-}
-```
+| Property | Value |
+|----------|-------|
+| Layer Name | `esg-python-docx` |
+| Current Version | `:2` |
+| Compatible Runtime | python3.11 |
+| Contents | python-docx + lxml (Linux x86_64 binaries) |
+| S3 Location | `s3://esg-data-raw-061039769766/lambda-layers/python-docx-layer.zip` |
 
-**Dependencies:** python-docx, python-pptx, matplotlib (via Layer)
+**⚠️ CRITICAL:** Must be built on Linux (CloudShell). Windows produces incompatible `.pyd` files.
 
----
-
-### Lambda Layer Specification
-
-**Layer Name:** `esg-reporting-layer`
-
-**Compatible Runtimes:** Python 3.12
-
-**Contents:**
-- `python-docx==1.1.0` (DOCX generation)
-- `python-pptx==0.6.23` (PPTX generation)
-- `matplotlib==3.8.3` (Chart rendering)
-- `Pillow==10.2.0` (Image handling)
-- `lxml==5.1.0` (XML parsing for docx/pptx)
-
-**Size:** ~45 MB (compressed)
-
-**Build Command:**
 ```bash
-docker run --rm -v "$PWD":/var/task public.ecr.aws/lambda/python:3.12 \
-  /bin/bash -c "pip install python-docx python-pptx matplotlib pillow -t /var/task/python"
+# Build in CloudShell (us-east-1)
+mkdir -p /tmp/layer/python
+pip install python-docx -t /tmp/layer/python \
+  --platform manylinux2014_x86_64 --only-binary=:all: \
+  --python-version 3.11 --implementation cp
+cd /tmp/layer && zip -r /tmp/python-docx-layer.zip python/
+aws s3 cp /tmp/python-docx-layer.zip s3://esg-data-raw-061039769766/lambda-layers/
+aws lambda publish-layer-version --layer-name esg-python-docx \
+  --content S3Bucket=esg-data-raw-061039769766,S3Key=lambda-layers/python-docx-layer.zip \
+  --compatible-runtimes python3.11 --region us-east-1
 ```
 
 ---
 
 ## Step Functions
 
-### State Machine: esg-orchestrator
+### State Machine: ESGReportGenerationStateMachine
 
-**ARN:** `arn:aws:states:ap-southeast-1:ACCOUNT_ID:stateMachine:esg-orchestrator`
-
-**Role:** `ESGStepFunctionsRole`
-
-**Type:** STANDARD
-
-**Timeout:** 1 hour
+| Property | Value |
+|----------|-------|
+| ARN | `arn:aws:states:us-east-1:061039769766:stateMachine:ESGReportGenerationStateMachine` |
+| Type | STANDARD |
+| Role | ESGStepFunctionsRole |
+| Active ASL | `esg_orchestrator.asl.json` (auto-approve mode) |
+| Manual Review ASL | `esg_orchestrator_human_review_manual.asl.json` |
 
 ### State Machine Flow
 
 ```
-┌─────────────────┐
-│ ValidateInput   │ → Lambda: esg-validate-input
-└────────┬────────┘
-         │
-         ↓
-┌─────────────────┐
-│ GenerateSections│ → Map State (Parallel execution)
-│                 │   ├─ GRI_305_SCOPE1
-│                 │   ├─ GRI_305_SCOPE2
-│                 │   ├─ GRI_305_SCOPE3
-│                 │   ├─ IFRS_S2_STRATEGY_RISKS
-│                 │   ├─ IFRS_S2_GOVERNANCE
-│                 │   ├─ IFRS_S2_METRICS
-│                 │   ├─ IFRS_S2_PCAF_FINANCED_EMISSIONS
-│                 │   ├─ CSRD_ESRS_E1_CLIMATE_STRATEGY
-│                 │   └─ OJK_PSPK_GHG_INVENTORY
-└────────┬────────┘
-         │
-         ↓
-┌─────────────────┐
-│ FilterSections  │ → Lambda: esg-filter-sections
-└────────┬────────┘
-         │
-         ↓
-┌─────────────────┐
-│ AssembleDocument│ → Lambda: esg-assembly-doc
-└────────┬────────┘
-         │
-         ↓
-┌─────────────────┐
-│ ValidateReport  │ → Lambda: esg-validation
-└────────┬────────┘
-         │
-         ↓
-┌─────────────────┐
-│ HumanReview?    │ → Choice State (skip by default)
-└────────┬────────┘
-         │
-         ↓
-┌─────────────────┐
-│ Success         │ → Return download URLs
-└─────────────────┘
+ValidateInput → WaitForGlueJobs (Parallel: Scope1+2+3)
+  → TriggerAggregation → QueryAthena (GHG + PCAF + HR metrics)
+  → GenerateSections (Map, MaxConcurrency:3)
+      [per section: SectionGen → Validation → Choice]
+        PASS → Accumulate
+        WARN → AccumulateWithWarning
+        RETRY → Re-gen once → Re-validate
+        FAIL_NO_RETRY → Auto-Approve (SNS notify) → AccumulateWithWarning
+  → FilterSections (esg-filter-sections Lambda)
+  → AssembleDocument → NotifyCompletion (ResultPath: $.sns_result)
+  → Success (Pass type, outputs $.assembly_result)
 ```
+
+**Key Design Decisions:**
+- `esg-filter-sections` Lambda exists because Step Functions doesn't support JSONPath filter expressions
+- Success state is a `Pass` type (not `Succeed`) to output `assembly_result` for agent's `download_report` tool
+- `NotifyCompletion` uses `ResultPath: "$.sns_result"` to preserve assembly_result in state
+- Glue parameters passed via `States.Format` with `--REPORTING_YEAR`
+- SNS Message uses `States.JsonToString()` (SNS requires string, not JSON object)
+- ASL deployed via S3 (Windows `file://` encoding incompatible)
 
 ### Execution Times
 
 | Framework | Sections | Avg Time | Max Time |
 |-----------|----------|----------|----------|
-| GRI_305 | 5 | 3 min | 5 min |
-| IFRS_S2 | 4 | 4 min | 6 min |
-| CSRD_ESRS_E1 | 4 | 4 min | 6 min |
-| OJK_PSPK | 4 | 4 min | 6 min |
-| MULTI_FRAMEWORK | 9 | 8-12 min | 15 min |
+| GRI_305 | 7 (incl. Social) | 3-5 min | 5 min |
+| IFRS_S2 | 7 | 4 min | 6 min |
+| CSRD_ESRS_E1 | 7 | 4 min | 6 min |
+| OJK_PSPK | 6 | 4 min | 6 min |
+| MULTI_FRAMEWORK | 15 | 8-12 min | 15 min |
+
+### How to Start Execution
+
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn arn:aws:states:us-east-1:061039769766:stateMachine:ESGReportGenerationStateMachine \
+  --input '{
+    "reporting_year": 2024,
+    "framework": "GRI_305",
+    "bank_id": "GENERIC_FI_001",
+    "output_bucket": "esg-output-reports-061039769766",
+    "revenue_idr_billion": 92000.0,
+    "kb_id": "WVREXI1LEI",
+    "section_templates": [
+      {"template_id": "scope1", "framework": "GRI_305"},
+      {"template_id": "scope2", "framework": "GRI_305"},
+      {"template_id": "scope3_pcaf", "framework": "GRI_305"},
+      {"template_id": "intensity", "framework": "GRI_305"},
+      {"template_id": "social", "framework": "GRI_305"},
+      {"template_id": "methodology", "framework": "GRI_305"},
+      {"template_id": "summary", "framework": "NONE"}
+    ]
+  }' --region us-east-1
+```
 
 ---
 
 ## API Gateway
 
-### REST API: ESG Reporting API
+### REST API: ESG-Chat-API
 
-**API ID:** (generated on creation)
+| Property | Value |
+|----------|-------|
+| API ID | `olj4tuggm1` |
+| Endpoint | `https://olj4tuggm1.execute-api.us-east-1.amazonaws.com/prod` |
+| Type | REGIONAL |
+| Stage | prod |
 
-**Endpoint:** `https://API_ID.execute-api.ap-southeast-1.amazonaws.com/prod`
-
-**Type:** REGIONAL
-
-**Stage:** prod
-
-### API Endpoints
+### Endpoints (5 total)
 
 | Method | Path | Integration | Purpose |
 |--------|------|-------------|---------|
-| POST | /chat | Bedrock Agent Runtime | Chat with ESG assistant |
-| GET | /status | Lambda: esg-status-check | Check report status |
+| POST | /chat | Lambda: esg-chat-proxy → Bedrock Agent | Chat with ESG assistant |
+| GET | /status | Lambda: esg-status-check | Check report generation status |
 | GET | /history | Lambda: esg-history | List all executions |
-| GET | /dashboard-data | Lambda: esg-dashboard-data | Get analytics data |
-
-### Endpoint Specifications
-
-#### 1. GET /status
-
-**Query Parameters:**
-- `execution_id` (required): Step Functions execution ID
-
-**Response:**
-```json
-{
-  "status": "SUCCEEDED",
-  "execution_id": "exec_abc123",
-  "start_time": "2024-06-15T03:00:00Z",
-  "end_time": "2024-06-15T03:08:23Z",
-  "output": {
-    "download_url": "https://...",
-    "download_url_pptx": "https://...",
-    "framework": "MULTI_FRAMEWORK",
-    "reporting_year": 2024
-  }
-}
-```
-
-
-#### 2. GET /history
-
-**Query Parameters:** None
-
-**Response:**
-```json
-{
-  "executions": [
-    {
-      "execution_id": "exec_abc123",
-      "status": "SUCCEEDED",
-      "framework": "MULTI_FRAMEWORK",
-      "reporting_year": 2024,
-      "start_time": "2024-06-15T03:00:00Z"
-    }
-  ]
-}
-```
-
-#### 3. GET /dashboard-data
-
-**Query Parameters:**
-- `refresh` (optional): `true` to force Athena refresh, `false` (default) to use cache
-
-**Response:**
-```json
-{
-  "kpis": {
-    "total_scope1": 1234.5,
-    "total_scope2": 5678.9,
-    "total_scope3": 987654.3,
-    "portfolio_size_billion": 125000,
-    "emission_intensity": 7.9,
-    "pcaf_avg_score": 4.2
-  },
-  "charts": {
-    "emissions_by_scope": [...],
-    "intensity_trends": [...],
-    "pcaf_distribution": [...],
-    "financed_by_sector": [...]
-  }
-}
-```
+| GET | /dashboard-data | Lambda: esg-dashboard-data | Get analytics dashboard data |
+| OPTIONS | (all) | MOCK | CORS preflight |
 
 ### CORS Configuration
 
-All endpoints have CORS enabled:
 ```
 Access-Control-Allow-Origin: *
 Access-Control-Allow-Methods: GET, POST, OPTIONS
 Access-Control-Allow-Headers: Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token
 ```
 
+### Endpoint Response Examples
+
+#### GET /dashboard-data
+
+```json
+{
+  "reporting_year": 2024,
+  "last_updated": "2026-06-15T03:00:00Z",
+  "ghg_summary": {
+    "scope1_tco2e": 3402.99,
+    "scope1_natgas_tco2e": 1199.79,
+    "scope1_diesel_tco2e": 2203.20,
+    "scope2_location_tco2e": 73451.23,
+    "scope2_market_tco2e": 73451.23,
+    "scope3_cat15_gross_tco2e": 21976797.30,
+    "scope3_cat15_weighted_tco2e": 15280174.00,
+    "total_scope123_tco2e": 22053651.52,
+    "intensity_per_idr_bn": 239.71,
+    "intensity_per_fte": 882.55
+  },
+  "prior_year_summary": { ... },
+  "pcaf_sectors": [ ... ],
+  "scope1_facilities": [ ... ],
+  "hr_metrics": {
+    "fte_total": 24997,
+    "female_pct": 42.3,
+    "female_mgmt_pct": 26.7,
+    "hiring_rate_pct": 10.38,
+    "voluntary_turnover_pct": 8.4,
+    "training_hours_per_fte": 49.3,
+    "discrimination_cases": 2,
+    "prior_year": { ... },
+    "yoy_changes": {
+      "headcount_change_pct": 2.03,
+      "turnover_change_pct": -40.66,
+      "training_change_pct": -23.13,
+      "female_pct_change_pp": -3.88,
+      "mgmt_female_pct_change_pp": -1.78
+    }
+  }
+}
+```
+
 ---
 
 ## Amazon Bedrock
 
-### Bedrock Agent: ESG-Report-Assistant
+### Bedrock Agent: ESGReportAgent
 
-**Agent ID:** (generated on creation)
-
-**Alias:** production
-
-**Foundation Model:** `anthropic.claude-3-5-sonnet-20240620-v2:0`
-
-**Role:** `ESGBedrockAgentRole`
-
-**Region:** ap-southeast-1
-
-### Agent Instructions
-
-```text
-You are an ESG (Environmental, Social, Governance) Report Generation Assistant 
-specialized in sustainability reporting for financial institutions.
-
-SCOPE GUARDRAILS - STRICT ENFORCEMENT:
-You ONLY answer questions related to:
-- ESG reporting frameworks (GRI 305, IFRS S2, CSRD/ESRS E1, OJK PSPK)
-- Greenhouse gas (GHG) emissions (Scope 1, 2, 3)
-- PCAF (Partnership for Carbon Accounting Financials)
-- Climate risk disclosures
-- Sustainability metrics and KPIs
-
-If the user asks about topics OUTSIDE of ESG, politely reject:
-"I'm specialized in ESG reporting and sustainability topics. That question 
-is outside my scope. Can I help you with ESG reports instead?"
-
-RESPONSE FORMATTING:
-- Use markdown: **bold**, #headers, bullet lists
-- Add relevant emoji: 📊, 🌍, 💡, ✅, ⚠️
-- Short paragraphs (2-3 sentences max)
-- Professional but conversational tone
-```
+| Property | Value |
+|----------|-------|
+| Agent Name | ESGReportAgent |
+| Agent ID | `MBERNIQMBG` |
+| Alias ID | `QIXEJW2TN6` (esg-report-agent-v2) |
+| Foundation Model | `us.anthropic.claude-sonnet-4-5-20250929-v1:0` (inference profile) |
+| Action Group | ESGReportActions |
+| Tools Lambda | esg-agent-tools |
+| Instructions | `agent/agent_instructions.txt` |
+| OpenAPI Schema | `agent/openapi_schema.json` |
 
 ### Agent Tools (4 Actions)
 
-#### 1. generate_report
+| Tool | Method | Parameters | Backend |
+|------|--------|------------|---------|
+| `generate_report` | POST | reporting_year, framework, revenue_idr_billion | `sfn.start_execution()` |
+| `check_status` | POST | execution_arn | `sfn.describe_execution()` |
+| `download_report` | POST | execution_arn | `s3.generate_presigned_url()` (1hr, s3v4 sig) |
+| `list_available_data` | GET | — | Static response (years, frameworks) |
 
-**Method:** POST  
-**Parameters:**
-- `reporting_year` (integer, required): 2023 or 2024
-- `framework` (string, required): GRI_305, IFRS_S2, CSRD_ESRS_E1, OJK_PSPK, MULTI_FRAMEWORK
-- `revenue_idr_billion` (number, optional): Default 92000
+**Section Templates per Framework (from agent_tools):**
 
-**Returns:** Execution ARN and estimated completion time
-
-#### 2. check_status
-
-**Method:** POST  
-**Parameters:**
-- `execution_arn` (string, required): Execution ID
-
-**Returns:** Status (RUNNING/SUCCEEDED/FAILED) and output if complete
-
-#### 3. download_report
-
-**Method:** POST  
-**Parameters:**
-- `execution_arn` (string, required): Execution ID
-
-**Returns:** Presigned S3 URLs for DOCX and PPTX (1 hour expiry)
-
-#### 4. list_available_data
-
-**Method:** GET  
-**Parameters:** None
-
-**Returns:** Available years (2023, 2024) and supported frameworks
+| Framework | Sections |
+|-----------|----------|
+| GRI_305 | scope1, scope2, scope3_pcaf, intensity, social, methodology, summary |
+| IFRS_S2 | governance, strategy_risks, metrics, pcaf, intensity, social, summary |
+| CSRD_ESRS_E1 | climate_strategy, metrics, pcaf, intensity, social, methodology, summary |
+| OJK_PSPK | ghg_inventory, pcaf, intensity, social, methodology, summary |
+| MULTI_FRAMEWORK | All 15 sections across all frameworks |
 
 ### Bedrock Knowledge Base: ESG-Framework-KB
 
-**KB ID:** (generated on creation)
+| Property | Value |
+|----------|-------|
+| KB ID | `WVREXI1LEI` |
+| Region | us-east-1 |
+| Documents Bucket | `esg-kb-documents-061039769766` |
+| Embedding Model | Amazon Titan Embeddings V2 (1024 dimensions, floating) |
+| Vector Store | OpenSearch Serverless (Quick Create) |
+| Active Replicas | Disabled |
+| Standby Replicas | Disabled |
+| **Chunking Strategy** | **Semantic** |
+| Max Sentences per Chunk | 1 |
+| Token Size | 700 |
+| Similarity Percentile Threshold | 90% |
+| Foundation Model (parser) | Claude Sonnet 4.5 |
+| Min Relevance Score (retrieval) | **0.40** |
 
-**Data Source:** S3 (`s3://esg-knowledge-base/documents/`)
+> Note: Semantic chunking produces lower similarity scores than fixed-size chunking. The 0.40 threshold is intentionally lower than the typical 0.65 — setting it higher filters out valid regulatory content.
 
-**Embeddings Model:** Amazon Titan Embeddings v2
-
-**Vector Store:** Amazon OpenSearch Serverless (auto-created)
-
-**Documents:**
-- GRI 305 Standard (Emissions)
-- IFRS S2 Climate Disclosures
-- CSRD/ESRS E1 Climate Change
-- OJK POJK 51/2017 Sustainable Finance
-- PCAF Global GHG Accounting Standard
-- Sample ESG reports (BCA, BRI, DBS, Mandiri, OCBC)
-
-**Total Documents:** ~15 PDFs + text files
-
-**Sync Frequency:** Manual (via console)
+**KB Filter Logic:** Uses `orAll` filter for cross-framework sections (e.g., `scope3_pcaf` → GRI_305 + PCAF filter).
 
 ---
 
 ## S3 Buckets
 
-### 1. esg-reporting-output-bucket
+### Bucket Inventory (6 Buckets)
 
-**Purpose:** Store generated DOCX and PPTX reports
+| Bucket Name | Purpose | Versioning | Encryption |
+|-------------|---------|------------|-----------|
+| `esg-data-raw-061039769766` | Raw zone — source data, scripts, layers | Enabled | AES-256 |
+| `esg-data-curated-061039769766` | ETL-computed GHG calculations | Enabled | AES-256 |
+| `esg-data-aggregated-061039769766` | Report-ready annual metrics + dashboard cache | Enabled | AES-256 |
+| `esg-output-reports-061039769766` | Generated DOCX reports | Enabled | KMS |
+| `esg-kb-documents-061039769766` | KB docs + prompts + templates | Enabled | AES-256 |
+| `esg-athena-results-061039769766` | Athena query results | Enabled | AES-256 |
 
-**Region:** ap-southeast-1
+### S3 Path Convention
 
-**Versioning:** Enabled
-
-**Encryption:** AES-256 (server-side)
-
-**Public Access:** Blocked
-
-**Lifecycle Policy:**
-```json
-{
-  "Rules": [{
-    "ID": "DeleteOldVersions",
-    "Status": "Enabled",
-    "Filter": {},
-    "NoncurrentVersionExpiration": {
-      "NewerNoncurrentVersions": 3,
-      "NoncurrentDays": 30
-    }
-  }]
-}
+```
+s3://{bucket}/{zone}/{table}/reporting_year={YYYY}/[reporting_month={MM}/]
 ```
 
-**Folder Structure:**
-```
-reports/
-  ├── 2023/
-  │   ├── GRI_305_2023_exec_xxx.docx
-  │   └── MULTI_FRAMEWORK_2023_exec_yyy.pptx
-  └── 2024/
-      ├── IFRS_S2_2024_exec_zzz.docx
-      └── MULTI_FRAMEWORK_2024_exec_aaa.pptx
-```
+Hive-style partitioning per REQ-DDL-05.
 
-**Average File Size:**
-- DOCX: 500 KB - 2 MB
-- PPTX: 1 MB - 3 MB
+### Key S3 Locations
 
----
-
-### 2. esg-athena-results
-
-**Purpose:** Store Athena query results and dashboard cache
-
-**Region:** ap-southeast-1
-
-**Versioning:** Enabled
-
-**Encryption:** AES-256
-
-**Public Access:** Blocked
-
-**Folder Structure:**
-```
-queries/
-  └── [query-execution-id]/
-      └── results.csv
-dashboard-cache/
-  └── latest.json
-```
-
-**Cache Strategy:**
-- Dashboard reads from `dashboard-cache/latest.json` by default (free)
-- Manual refresh triggers Athena query and updates cache (~$0.01)
-
----
-
-### 3. esg-knowledge-base
-
-**Purpose:** Store ESG framework documents for Bedrock Knowledge Base
-
-**Region:** ap-southeast-1
-
-**Versioning:** Enabled
-
-**Encryption:** AES-256
-
-**Public Access:** Blocked
-
-**Folder Structure:**
-```
-documents/
-  ├── gri_GRI_305_Emissions_2016.pdf
-  ├── ifrs_IFRS_S2_Climate_Disclosures_2023.pdf
-  ├── csrd_ESRS_E1_Climate_Change_2023.pdf
-  ├── ojk_POJK_51_2017_Sustainable_Finance.pdf
-  ├── ghg_methodology_PCAF_Standard_Part_A_2022.pdf
-  └── ...
-```
+| Path | Content |
+|------|---------|
+| `s3://esg-data-raw-*/energy_consumption/reporting_year=2024/` | Energy data (2,640 rows) |
+| `s3://esg-data-raw-*/loan_portfolio/reporting_year=2024/` | Loan data (2,200 rows) |
+| `s3://esg-data-raw-*/hr_metrics/reporting_year=2024/` | HR metrics (1 row) |
+| `s3://esg-data-raw-*/scripts/` | Glue ETL scripts |
+| `s3://esg-data-raw-*/lambda-layers/` | Lambda layer zip |
+| `s3://esg-data-raw-*/lambda-code/` | Lambda function zips |
+| `s3://esg-data-aggregated-*/dashboard-cache/latest.json` | Dashboard cache |
+| `s3://esg-output-reports-*/reports/year=2024/{framework}/` | Generated reports |
+| `s3://esg-kb-documents-*/prompts/templates/` | Section templates |
 
 ---
 
 ## Glue & Athena
 
-### Glue Database: esg_reporting_db
+### Glue Jobs (4 ETL Jobs)
 
-**Database Name:** `esg_reporting_db`
+| Job Name | Script | Input | Output | Status |
+|----------|--------|-------|--------|--------|
+| esg-etl-scope1-direct | glue_job_scope1_ghg.py | esg_raw/energy (complete) | esg_curated/ghg_scope1 | ✅ |
+| esg-etl-scope2-indirect | glue_job_scope2_electricity.py | esg_raw/energy (complete) | esg_curated/ghg_scope2 | ✅ |
+| esg-etl-scope3-pcaf | glue_job_scope3_pcaf.py | esg_raw/loans (validated) | esg_curated/ghg_scope3_financed | ✅ |
+| esg-etl-aggregation | glue_job_aggregation.py | All curated | esg_aggregated/* | ✅ |
 
-**Location:** `s3://esg-athena-results/`
+**Glue Job Config:** Glue 4.0, G.1X workers × 2, Python 3, `--enable-glue-datacatalog`
 
-**Description:** ESG Reporting Database for Athena queries
+**Important:** Glue jobs read S3 directly (`spark.read.parquet` with `basePath`), NOT from Glue Catalog. Schema governance gate validates before processing.
 
-### Glue Tables (Example Schema)
+### Athena Configuration
 
-#### Table: esg_emissions
+| Property | Value |
+|----------|-------|
+| Workgroup | `esg-reporting-workgroup` |
+| Engine | Athena SQL (Engine v3) |
+| Result Location | `s3://esg-athena-results-061039769766/query-results/` |
+| Authentication | IAM only |
 
-```sql
-CREATE EXTERNAL TABLE IF NOT EXISTS esg_reporting_db.esg_emissions (
-  year INT,
-  scope INT,
-  source STRING,
-  emissions_tco2e DOUBLE,
-  location STRING,
-  data_quality_score INT
-)
-PARTITIONED BY (reporting_year INT)
-STORED AS PARQUET
-LOCATION 's3://esg-athena-results/tables/emissions/'
-TBLPROPERTIES ('parquet.compression'='SNAPPY');
+### Databases & Tables (12 Tables across 3 Databases)
+
+| Database | Table | Partition Key | Description |
+|----------|-------|---------------|-------------|
+| esg_raw | energy_consumption | reporting_year | 220 facilities × 12 months |
+| esg_raw | loan_portfolio | reporting_year | 2,200 borrowers |
+| esg_raw | hr_metrics | reporting_year | 1 row per year |
+| esg_curated | ghg_scope1 | reporting_year | Per-facility Scope 1 |
+| esg_curated | ghg_scope2 | reporting_year | Per-facility Scope 2 |
+| esg_curated | ghg_scope3_financed | reporting_year | Per-borrower PCAF |
+| esg_aggregated | ghg_summary_annual | reporting_year | Annual totals (14 columns incl. natgas/diesel) |
+| esg_aggregated | pcaf_by_sector | reporting_year | PCAF emissions by sector |
+| esg_aggregated | scope1_by_facility | reporting_year | Top 10 emitters per year |
+
+**All tables use Partition Projection:**
+```
+projection.enabled = true
+projection.reporting_year.type = integer
+projection.reporting_year.range = 2020,2035
+parquet.compress = SNAPPY
+classification = parquet
 ```
 
-#### Table: pcaf_portfolio
+### Emission Factor Constants
 
-```sql
-CREATE EXTERNAL TABLE IF NOT EXISTS esg_reporting_db.pcaf_portfolio (
-  year INT,
-  sector STRING,
-  borrower_id STRING,
-  loan_amount_idr BIGINT,
-  financed_emissions_tco2e DOUBLE,
-  data_quality_score INT
-)
-PARTITIONED BY (reporting_year INT)
-STORED AS PARQUET
-LOCATION 's3://esg-athena-results/tables/pcaf/'
-TBLPROPERTIES ('parquet.compression'='SNAPPY');
-```
-
-### Athena Workgroup
-
-**Name:** primary
-
-**Output Location:** `s3://esg-athena-results/queries/`
-
-**Data Scanned (per query):** ~10-50 MB
-
-**Cost per Query:** ~$0.01
+| Constant | Value | Unit | Source |
+|----------|-------|------|--------|
+| GWP_CH4 | 29.8 | kg CO2e/kg CH4 | IPCC AR6 GWP100 |
+| GWP_N2O | 273.0 | kg CO2e/kg N2O | IPCC AR6 GWP100 |
+| EF_NATGAS_KGCO2_PER_GJ | 56.10 | kg CO2/GJ | IPCC 2006 |
+| EF_DIESEL_KGCO2_PER_L | 2.53763 | kg CO2/L | DEFRA 2025 |
+| GRID_EF_PLN_2023 | 0.7886 | kg CO2/kWh | PLN National Grid 2023 |
 
 ---
 
 ## AWS Amplify
 
-### App: esg-chat-app
+### App: esg-reporting-dashboard
 
-**Repository:** `https://github.com/radityar21/esg-chat-app`
+| Property | Value |
+|----------|-------|
+| App ID | `d337jqli3ubqmk` |
+| URL | `https://main.d337jqli3ubqmk.amplifyapp.com` |
+| Repository | `https://github.com/radityar21/esg-chat-app` |
+| Branch | main |
+| Framework | React 18 + Vite 5 + Tailwind CSS 3 + Recharts 2.15 |
+| Build Time | 2-3 minutes |
+| Deploy Trigger | Push to `main` (auto-deploy) |
 
-**Branch:** main
+### Frontend Pages (5)
 
-**Build Spec:** `amplify.yml` (in repo root)
+| Page | Content |
+|------|---------|
+| Overview | Stats, recent reports |
+| Analytics | 14 charts + 6 KPI cards (10 Environmental, 4 Social) |
+| Chat | Bedrock Agent conversation (with auto-polling) |
+| Reports | Report history list |
+| Reference | Framework documentation |
 
-**Build Configuration:**
+### Design System
+
+| Element | Value |
+|---------|-------|
+| Theme | Dark mode (navy #0f172a) |
+| Glassmorphism | backdrop-blur-xl, bg-white/[0.02] |
+| Accent Colors | Blue (#4f8cf7), Teal (#06d6a0), Purple (#7c5cfc) |
+| Typography | Inter font |
+| Logo | "Tokaicom Mitra Indonesia (Tokai Group)" |
+
+### Build Configuration (amplify.yml)
+
 ```yaml
 version: 1
 frontend:
@@ -935,46 +786,37 @@ frontend:
       - esg-chat-app-react/node_modules/**/*
 ```
 
-**Custom Domain:** (optional)
+### Silent Polling (Chat Feature)
 
-**Environment Variables:** None (API URL hardcoded in `src/api.js`)
-
-**Deployment URL:** `https://main.d337jqli3ubqmk.amplifyapp.com`
-
-**Build Time:** 2-3 minutes
-
-**Deploy Trigger:** Push to `main` branch (auto-deploy)
+| Feature | Implementation |
+|---------|----------------|
+| Execution ID detection | Regex: `/Execution ID:\s*([a-f0-9\-]+)/i` |
+| Poll interval | 30 seconds |
+| Max attempts | 30 (15 min timeout) |
+| Status detection | String match: SUCCEEDED/complete → done |
+| Download URL | Silent agent call → regex extract URL |
+| Indicator | CSS pulse animation + elapsed time |
 
 ---
 
 ## Network & Security
 
-### VPC Configuration
-
-**Current:** Lambdas run in AWS-managed VPC (no custom VPC)
-
-**Future Enhancement:** Deploy Lambdas in private subnet with NAT Gateway for enhanced security
-
-### Security Groups
-
-Not applicable (no custom VPC)
-
 ### Encryption
 
-| Resource | Encryption Type | Key |
-|----------|----------------|-----|
-| S3 Buckets | Server-side | AES-256 (SSE-S3) |
-| Lambda Environment Variables | At rest | AWS-managed key |
-| Athena Results | Server-side | AES-256 (SSE-S3) |
+| Resource | Type | Key |
+|----------|------|-----|
+| S3 Buckets (5) | Server-side | AES-256 (SSE-S3) |
+| S3 Output Reports | Server-side | **KMS** (requires s3v4 signature for presigned URLs) |
+| Lambda Env Variables | At rest | AWS-managed key |
 | OpenSearch (KB) | At rest | AWS-managed key |
 
-### IAM Best Practices
+### IAM Design (POC vs Production)
 
-- ✅ Principle of least privilege
-- ✅ No wildcard (*) permissions in production
-- ✅ Separate roles for each service
-- ✅ Resource-level permissions where possible
-- ✅ Condition keys for cross-service access
+| POC (Current) | Production (Recommended) |
+|---------------|--------------------------|
+| 1 shared ESGLambdaRole | 5+ separate roles per function |
+| Wildcard Bedrock model access | Specific model ARN only |
+| All S3 buckets in one policy | Least-privilege per function |
 
 ---
 
@@ -982,49 +824,31 @@ Not applicable (no custom VPC)
 
 ### CloudWatch Log Groups
 
-| Log Group | Retention | Purpose |
-|-----------|-----------|---------|
-| `/aws/lambda/esg-validate-input` | 7 days | Input validation logs |
-| `/aws/lambda/esg-section-gen` | 30 days | Report generation logs (high volume) |
-| `/aws/lambda/esg-assembly-doc` | 7 days | Document assembly logs |
-| `/aws/lambda/esg-status-check` | 7 days | Status API logs |
-| `/aws/lambda/esg-history` | 7 days | History API logs |
-| `/aws/lambda/esg-athena-query` | 7 days | Athena query logs |
-| `/aws/lambda/esg-dashboard-data` | 7 days | Dashboard data logs |
-| `/aws/lambda/esg-agent-tools` | 7 days | Agent tools logs |
-| `/aws/vendedlogs/states/esg-orchestrator` | 30 days | Step Functions execution logs |
-| `/aws/apigateway/esg-reporting-api` | 7 days | API Gateway access logs |
-
-### CloudWatch Metrics
-
-#### Lambda Metrics
-- Invocations
-- Errors
-- Duration (P50, P90, P99, P100)
-- Throttles
-- Concurrent Executions
-
-#### Step Functions Metrics
-- ExecutionsStarted
-- ExecutionsSucceeded
-- ExecutionsFailed
-- ExecutionTime
-
-#### API Gateway Metrics
-- Count (requests)
-- 4XXError
-- 5XXError
-- IntegrationLatency
-- Latency
+| Log Group | Retention |
+|-----------|-----------|
+| /aws/lambda/esg-validate-input | 7 days |
+| /aws/lambda/esg-athena-query | 7 days |
+| /aws/lambda/esg-section-gen | 30 days |
+| /aws/lambda/esg-filter-sections | 7 days |
+| /aws/lambda/esg-validation | 7 days |
+| /aws/lambda/esg-review-handler | 7 days |
+| /aws/lambda/esg-assembly-doc | 7 days |
+| /aws/lambda/esg-status-check | 7 days |
+| /aws/lambda/esg-history | 7 days |
+| /aws/lambda/esg-dashboard-data | 7 days |
+| /aws/lambda/esg-agent-tools | 7 days |
+| /aws/lambda/esg-chat-proxy | 7 days |
+| /aws/vendedlogs/states/ESGReportGeneration | 30 days |
+| /aws/apigateway/esg-chat-api | 7 days |
 
 ### CloudWatch Alarms
 
-| Alarm Name | Metric | Threshold | Action |
-|-----------|--------|-----------|--------|
-| ESG-Lambda-Errors-High | Lambda Errors | > 5 in 5 min | SNS notification |
-| ESG-StepFunctions-Failed | ExecutionsFailed | > 3 in 1 hour | SNS notification |
-| ESG-API-5XX-Errors | 5XXError | > 10 in 5 min | SNS notification |
-| ESG-Section-Gen-Timeout | Duration | > 550s | SNS notification |
+| Alarm | Metric | Threshold | Action |
+|-------|--------|-----------|--------|
+| ESG-Lambda-Errors | Lambda Errors | > 5 in 5 min | SNS |
+| ESG-StepFunctions-Failed | ExecutionsFailed | > 3 in 1 hour | SNS |
+| ESG-API-5XX | 5XXError | > 10 in 5 min | SNS |
+| ESG-Section-Gen-Timeout | Duration | > 110s | SNS |
 
 ---
 
@@ -1032,52 +856,54 @@ Not applicable (no custom VPC)
 
 ### Monthly Cost Breakdown (100 reports/month)
 
-| Service | Usage | Unit Cost | Monthly Cost |
-|---------|-------|-----------|-------------|
-| **Lambda Compute** | | | |
-| - esg-section-gen | 100 exec × 9 sections × 45s × 512MB | $0.0000083/GB-s | $1.69 |
-| - esg-assembly-doc | 100 exec × 30s × 1024MB | $0.0000083/GB-s | $0.25 |
-| - Other Lambdas | 300 exec × 5s × 256MB | $0.0000083/GB-s | $0.03 |
-| **Lambda Requests** | 1,100 requests | $0.20/1M | $0.00 |
-| **Bedrock API** | 100 reports × 9 sections × 12K tokens | $3/MTok input, $15/MTok output | $12.96 |
-| **Step Functions** | 100 executions × 12 state transitions | $0.025/1K transitions | $0.03 |
-| **API Gateway** | 10,000 requests | $3.50/1M | $0.04 |
-| **S3 Storage** | 100 reports × 2MB avg | $0.023/GB | $0.005 |
-| **S3 Requests** | 1,000 PUT + 5,000 GET | $0.005/1K PUT, $0.0004/1K GET | $0.007 |
-| **Athena** | 10 dashboard refreshes × 50MB scanned | $5/TB | $0.002 |
-| **Glue Data Catalog** | 5 tables | $1/100K objects | $0.00 |
-| **OpenSearch Serverless (KB)** | 1 OCU-hour × 720 hours | $0.24/OCU-hour | $172.80 |
-| **Amplify Hosting** | 1 app, 5GB transfer | Free tier | $0.00 |
-| **CloudWatch Logs** | 5GB ingested | $0.50/GB | $2.50 |
-| **CloudWatch Alarms** | 4 alarms | $0.10/alarm | $0.40 |
-| **TOTAL** | | | **~$190.77/month** |
+| Service | Usage | Monthly Cost |
+|---------|-------|-------------|
+| **OpenSearch Serverless (KB)** | 1 OCU × 720 hrs × $0.24 | **$172.80** |
+| **Bedrock API** | 100 reports × 8 sections × 12K tokens | **$12.96** |
+| **Lambda Compute** | All functions combined | **$2.00** |
+| **S3 Storage** | ~500 MB total | **$0.01** |
+| **Step Functions** | 100 exec × 15 transitions | **$0.04** |
+| **API Gateway** | ~10,000 requests | **$0.04** |
+| **Athena** | 10 refreshes × 50MB | **$0.003** |
+| **CloudWatch Logs** | 5 GB ingested | **$2.50** |
+| **Amplify Hosting** | Free tier | **$0.00** |
+| **Glue ETL** | Sporadic runs | **~$1.00** |
+| **Total** | | **~$191/month** |
 
-**Note:** OpenSearch Serverless dominates cost ($172.80). Can be optimized by:
-- Using Aurora Serverless for vector store (~$25/month)
-- Or disabling Knowledge Base if not needed (~$18/month total)
+### Cost Optimization
 
-### Cost Optimization Strategies
+| Strategy | Savings | New Total |
+|----------|---------|-----------|
+| Switch KB to Aurora Serverless | -$150 | ~$41/month |
+| Disable KB entirely (templates only) | -$173 | ~$18/month |
+| Reduce CloudWatch retention | -$1.50 | Minimal |
+| Aggressive S3 lifecycle (Glacier 90d) | -$0.01 | Minimal |
 
-1. **Reduce OpenSearch cost:**
-   - Switch to Aurora Serverless vector store
-   - Or use Amazon Kendra (pay-per-query)
+---
 
-2. **Lambda optimization:**
-   - Increase memory for faster execution (reduces duration cost)
-   - Use Lambda SnapStart for Java runtimes (not applicable, using Python)
+## Known Issues & Validation False Positives
 
-3. **S3 lifecycle:**
-   - Move old reports to Glacier after 90 days
-   - Delete reports older than 1 year
+### Validation Layer Issues
 
-4. **Athena optimization:**
-   - Partition tables by year
-   - Use Parquet + Snappy compression
-   - Cache dashboard data aggressively
+> These are calibration issues, NOT data errors. Auto-approve mode is the correct approach for POC.
 
-5. **CloudWatch Logs:**
-   - Reduce retention to 3 days for low-priority logs
-   - Export to S3 for long-term storage
+| Issue ID | Description | Root Cause | Impact | Fix Effort |
+|----------|-------------|-----------|--------|------------|
+| VAL-NUM-01 | Scientific notation mismatch | Regex extracts `2.19E7` vs float `21976797.3` | LOW | 30 min |
+| VAL-NUM-01/03 | LLM-derived percentages flagged | Model calculates `component/total × 100` correctly but result not in source data | LOW | 1 hr |
+| VAL-NUM-07 | Table values not in paragraphs | Narrative summarizes, doesn't repeat every table value | LOW | 15 min |
+| VAL-NUM-01 | Sector values not in allowed set | `pcaf_sectors` not passed to ValidationFn as source_metrics | MEDIUM | 30 min |
+
+**DI-2 Compliance Note:** Spec rule says "model MUST NOT perform arithmetic." LLM technically derives percentages, but they're mathematically correct and improve report readability. For production: pre-compute all common percentages in aggregation layer.
+
+### Infrastructure Limitations
+
+| Issue | Status | Workaround |
+|-------|--------|-----------|
+| Human Review Function URL blocked by Org SCP | ⚠️ Blocked | Use auto-approve ASL mode |
+| Agent markdown corrupts presigned URLs | ⚠️ Known | Frontend regex strips trailing `)` / `]` |
+| Windows `file://` encoding breaks ASL deploy | ⚠️ Known | Upload to S3, deploy from CloudShell |
+| Model `claude-3-5-sonnet-20241022-v2:0` deprecated | ✅ Fixed | Migrated to `us.anthropic.claude-sonnet-4-5-20250929-v1:0` |
 
 ---
 
@@ -1085,50 +911,21 @@ Not applicable (no custom VPC)
 
 ### Backup Strategy
 
-| Resource | Backup Method | Frequency | Retention |
-|----------|--------------|-----------|-----------|
-| S3 Buckets | Versioning + Cross-region replication | Continuous | 90 days |
-| Lambda Code | Git repository + S3 deployment packages | Per deployment | Indefinite |
-| Step Functions | Version-controlled JSON definition | Per update | Indefinite |
-| Glue Tables | CloudFormation template | Per schema change | Indefinite |
-| Knowledge Base | S3 source documents | Continuous | Indefinite |
+| Resource | Method | Frequency |
+|----------|--------|-----------|
+| S3 Buckets | Versioning (enabled on all) | Continuous |
+| Lambda Code | Git repository + S3 zips | Per deployment |
+| Step Functions ASL | Git repository + S3 | Per update |
+| KB Documents | S3 versioning | Continuous |
+| Athena DDL | Git-tracked SQL files | Per schema change |
 
-### Recovery Time Objective (RTO)
+### RTO/RPO
 
-- **Infrastructure:** 1-2 hours (re-deploy via CDK or manual)
-- **Data (S3):** 0 minutes (versioning, no data loss)
-- **Lambda code:** 10 minutes (re-deploy from Git)
-
-### Recovery Point Objective (RPO)
-
-- **S3 Data:** 0 (continuous versioning)
-- **Lambda deployments:** Last Git commit
-- **Infrastructure:** Last CDK deployment
-
----
-
-## Compliance & Governance
-
-### Data Residency
-
-- **Primary Region:** ap-southeast-1 (Singapore)
-- **Data stays within region** (no cross-region replication by default)
-
-### Audit Logging
-
-- **CloudTrail:** Enabled for all API calls
-- **S3 Access Logs:** Enabled for audit trail
-- **Lambda Execution Logs:** CloudWatch Logs
-
-### Tags
-
-All resources tagged with:
-```
-Project=ESG
-Env=Production
-Owner=TokaiGroup
-CostCenter=Sustainability
-```
+| Scenario | RTO | RPO |
+|----------|-----|-----|
+| Lambda code corruption | 10 min (redeploy from S3) | Last deployment |
+| S3 data loss | 0 min (versioning) | 0 (continuous) |
+| Full infrastructure rebuild | 1-2 hours (manual) or 20 min (CDK) | Last Git commit |
 
 ---
 
@@ -1139,31 +936,38 @@ CostCenter=Sustainability
 | Operation | Target | Actual (P95) |
 |-----------|--------|--------------|
 | API Gateway → Lambda | < 100ms | 45ms |
-| Report Generation (GRI 305) | < 5 min | 3 min |
-| Report Generation (MULTI) | < 15 min | 10 min |
-| Dashboard Load (cached) | < 500ms | 200ms |
-| Dashboard Load (refresh) | < 5s | 3.5s |
+| Report Generation (GRI 305, 7 sections) | < 5 min | 3-5 min |
+| Report Generation (MULTI, 15 sections) | < 15 min | 8-12 min |
+| Dashboard Load (cached) | < 500ms | 200-500ms |
+| Dashboard Load (refresh) | < 15s | 8-15s |
 | Chat Response (no KB) | < 3s | 2s |
 | Chat Response (with KB) | < 5s | 4s |
 
 ### Throughput
 
-- **Concurrent report generations:** 10 (Lambda concurrency limit)
-- **API requests/sec:** 1,000 (API Gateway limit)
-- **Max reports/hour:** 60 (with current Lambda concurrency)
+| Metric | Value |
+|--------|-------|
+| Concurrent report generations | 10 (Lambda concurrency) |
+| API requests/sec | 1,000 (API Gateway limit) |
+| Max reports/hour | 60 |
+| Frontend bundle size | 593 KB JS (174 KB gzipped) |
+| First Contentful Paint | < 1s |
 
 ---
 
 ## 📚 References
 
-- **AWS Lambda:** https://docs.aws.amazon.com/lambda/
-- **AWS Step Functions:** https://docs.aws.amazon.com/step-functions/
-- **Amazon Bedrock:** https://docs.aws.amazon.com/bedrock/
-- **API Gateway:** https://docs.aws.amazon.com/apigateway/
-- **AWS Amplify:** https://docs.aws.amazon.com/amplify/
+| Document | Purpose |
+|----------|---------|
+| DEPLOYMENT_GUIDE.md | Step-by-step deployment instructions |
+| DEPLOYMENT_SUMMARY.md | Quick reference guide |
+| esg-reporting-poc/docs/IMPLEMENTATION_CHANGELOG.md | 91 spec deviations (W1-W6) |
+| esg-reporting-poc/docs/INFRASTRUCTURE_REFERENCE.md | Current deployed resource configs |
+| esg-reporting-poc/docs/SPEC_AMENDMENTS.md | 76 tracked amendments |
+| esg-reporting-poc/docs/VALIDATION_FALSE_POSITIVES.md | Validator calibration issues |
 
 ---
 
-**Document Version:** 1.0  
+**Document Version:** 1.1  
 **Last Updated:** June 15, 2026  
 **Maintained by:** Tokaicom Mitra Indonesia (Tokai Group)
