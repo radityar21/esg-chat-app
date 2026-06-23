@@ -13,8 +13,9 @@ export default function Chat() {
   const [executionId, setExecutionId] = useState(null)
   const chatEnd = useRef(null)
 
-  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, polling])
 
+  // Polling logic — stops and clears indicator on success/failure
   useEffect(() => {
     if (!polling || !executionId) return
     const interval = setInterval(async () => {
@@ -22,12 +23,31 @@ export default function Chat() {
         const data = await checkStatus(executionId)
         if (data.status === 'SUCCEEDED') {
           setPolling(false)
-          setMessages(prev => [...prev, { role: 'system', type: 'success', text: 'Report generated successfully!', download_url: data.download_url, download_url_pptx: data.download_url_pptx }])
+          setExecutionId(null)
+          // Remove the polling progress message and add success
+          setMessages(prev => {
+            const filtered = prev.filter(m => !(m.role === 'system' && (m.type === 'info' || m.type === 'polling')))
+            return [...filtered, {
+              role: 'system',
+              type: 'success',
+              text: 'Report generated successfully!',
+              download_url: data.download_url,
+              download_url_pptx: data.download_url_pptx,
+            }]
+          })
         } else if (data.status === 'FAILED') {
           setPolling(false)
-          setMessages(prev => [...prev, { role: 'system', type: 'error', text: `Report generation failed: ${data.error || 'Unknown error'}` }])
+          setExecutionId(null)
+          setMessages(prev => {
+            const filtered = prev.filter(m => !(m.role === 'system' && (m.type === 'info' || m.type === 'polling')))
+            return [...filtered, {
+              role: 'system',
+              type: 'error',
+              text: `Report generation failed: ${data.error || 'Unknown error'}`,
+            }]
+          })
         }
-      } catch (e) {}
+      } catch (e) { /* retry next interval */ }
     }, 30000)
     return () => clearInterval(interval)
   }, [polling, executionId])
@@ -42,11 +62,19 @@ export default function Chat() {
       const data = await sendChat(userMsg, sessionId)
       const reply = data.response || data.message || JSON.stringify(data)
       setMessages(prev => [...prev, { role: 'assistant', text: reply }])
+      // Detect execution ID for polling
       const match = reply.match(/Execution ID:\s*([a-f0-9-]+)/i)
       if (match) {
         setExecutionId(match[1])
         setPolling(true)
-        setMessages(prev => [...prev, { role: 'system', type: 'info', text: 'Report generation started. Monitoring progress...' }])
+        // Detect estimated time from agent response
+        const timeMatch = reply.match(/(\d+)[-–](\d+)\s*menit/i) || reply.match(/(\d+)[-–](\d+)\s*min/i)
+        const estTime = timeMatch ? `${timeMatch[1]}-${timeMatch[2]} minutes` : '10-20 minutes'
+        setMessages(prev => [...prev, { 
+          role: 'system', 
+          type: 'polling', 
+          text: `Report generation in progress. Estimated time: ~${estTime}. You will be notified automatically when complete.`
+        }])
       }
     } catch (e) {
       setMessages(prev => [...prev, { role: 'system', type: 'error', text: `Connection error: ${e.message}` }])
@@ -115,12 +143,7 @@ export default function Chat() {
           </div>
         )}
 
-        {polling && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-esg-amber/5 border border-esg-amber/20">
-            <Loader2 className="w-4 h-4 text-esg-amber animate-spin" />
-            <span className="text-xs text-esg-amber font-medium">Generating report... This may take 2-5 minutes</span>
-          </div>
-        )}
+        {/* No separate floating bar — polling status shown as chat message above */}
         <div ref={chatEnd} />
       </div>
 
@@ -148,6 +171,76 @@ export default function Chat() {
   )
 }
 
+// ─── Markdown Renderer (simple) ──────────────────────────────────────────────
+function renderMarkdown(text) {
+  if (!text) return null
+
+  // Split into lines for processing
+  const lines = text.split('\n')
+  const elements = []
+
+  lines.forEach((line, i) => {
+    // Process inline markdown within the line
+    const parts = parseInlineMarkdown(line)
+    elements.push(
+      <span key={i}>
+        {parts}
+        {i < lines.length - 1 && <br />}
+      </span>
+    )
+  })
+
+  return elements
+}
+
+function parseInlineMarkdown(text) {
+  // Order matters: bold+italic first, then bold, then italic
+  // Pattern: ***text*** or ___text___ → bold italic
+  // Pattern: **text** or __text__ → bold
+  // Pattern: *text* or _text_ → italic
+  const parts = []
+  let remaining = text
+  let key = 0
+
+  // Regex that matches bold-italic, bold, or italic
+  const regex = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*)/g
+  let lastIndex = 0
+  let match
+
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before this match
+    if (match.index > lastIndex) {
+      parts.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>)
+    }
+
+    if (match[2]) {
+      // ***bold italic***
+      parts.push(<strong key={key++}><em>{match[2]}</em></strong>)
+    } else if (match[3]) {
+      // **bold**
+      parts.push(<strong key={key++}>{match[3]}</strong>)
+    } else if (match[4]) {
+      // *italic*
+      parts.push(<em key={key++}>{match[4]}</em>)
+    }
+
+    lastIndex = match.index + match[0].length
+  }
+
+  // Add remaining text after last match
+  if (lastIndex < text.length) {
+    parts.push(<span key={key++}>{text.slice(lastIndex)}</span>)
+  }
+
+  // If no matches found, return original text
+  if (parts.length === 0) {
+    return text
+  }
+
+  return parts
+}
+
+// ─── Message Bubble ──────────────────────────────────────────────────────────
 function MessageBubble({ message }) {
   const { isDark } = useTheme()
   const { role, text, type, download_url, download_url_pptx } = message
@@ -202,24 +295,38 @@ function MessageBubble({ message }) {
         </div>
       )
     }
+    // Info/Polling type (checkpoint alert style in chat)
     return (
-      <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl ${
-        isDark ? 'bg-white/[0.02] border border-white/[0.06]' : 'bg-gray-50 border border-gray-100'
+      <div className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl border ${
+        type === 'polling'
+          ? 'bg-esg-amber/5 border-esg-amber/20'
+          : isDark ? 'bg-white/[0.02] border-white/[0.06]' : 'bg-gray-50 border-gray-100'
       }`}>
-        <Loader2 className="w-3.5 h-3.5 text-accent-blue animate-spin" />
-        <span className={`text-xs ${isDark ? 'text-white/50' : 'text-gray-500'}`}>{text}</span>
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          type === 'polling' ? 'bg-esg-amber/15' : 'bg-accent-blue/10'
+        }`}>
+          <Loader2 className={`w-4 h-4 animate-spin ${type === 'polling' ? 'text-esg-amber' : 'text-accent-blue'}`} />
+        </div>
+        <div>
+          <span className={`text-xs font-medium ${type === 'polling' ? 'text-esg-amber' : isDark ? 'text-white/60' : 'text-gray-600'}`}>
+            {type === 'polling' ? '⏳ Generation In Progress' : 'Processing'}
+          </span>
+          <p className={`text-[11px] mt-0.5 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>{text}</p>
+        </div>
       </div>
     )
   }
 
-  // Assistant
+  // Assistant — render markdown
   return (
     <div className="flex items-start gap-3">
       <div className="w-8 h-8 rounded-lg bg-accent-purple/20 flex items-center justify-center flex-shrink-0">
         <Bot className="w-4 h-4 text-accent-purple" />
       </div>
       <div className="glass-card px-4 py-3 rounded-2xl rounded-tl-md max-w-[70%]">
-        <p className={`text-sm whitespace-pre-wrap leading-relaxed ${isDark ? 'text-white/80' : 'text-gray-700'}`}>{text}</p>
+        <div className={`text-sm whitespace-pre-wrap leading-relaxed ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
+          {renderMarkdown(text)}
+        </div>
       </div>
     </div>
   )
