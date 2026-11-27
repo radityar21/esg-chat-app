@@ -2,13 +2,23 @@ import { useState, useRef, useEffect } from 'react'
 import { sendChat, checkStatus } from '../api'
 import { useTheme } from '../ThemeContext'
 import { Send, Bot, User, Loader2, CheckCircle2, AlertCircle, Download, Sparkles } from 'lucide-react'
+import AgentActivity from '../components/AgentActivity'
+import { Pill } from '../components/ui'
+import { api, platformEnabled, CHAT_BASE } from '../lib/platform'
+
+// AgentCore needs a session id of at least 33 characters. crypto.randomUUID only exists in secure contexts (https), so fall back to getRandomValues.
+function newSessionId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return 'esg-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
 
 export default function Chat() {
   const { isDark } = useTheme()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sessionId] = useState(crypto.randomUUID())
+  const [sessionId] = useState(newSessionId)
+  const [focusId, setFocusId] = useState(null)
   const [polling, setPolling] = useState(false)
   const [executionId, setExecutionId] = useState(null)
   const chatEnd = useRef(null)
@@ -59,22 +69,28 @@ export default function Chat() {
     setMessages(prev => [...prev, { role: 'user', text: userMsg }])
     setLoading(true)
     try {
-      const data = await sendChat(userMsg, sessionId)
+      const data = platformEnabled
+        ? await api('/agent/chat', { method: 'POST', base: CHAT_BASE, body: { prompt: userMsg, session_id: sessionId }, timeout: 170000 })
+        : await sendChat(userMsg, sessionId)
       const reply = data.response || data.message || JSON.stringify(data)
       setMessages(prev => [...prev, { role: 'assistant', text: reply }])
       // Detect execution ID for polling
-      const match = reply.match(/Execution ID:\s*([a-f0-9-]+)/i)
+      const match = reply.match(/Execution ID:\s*`?([A-Za-z0-9_-]{8,})/i)
       if (match) {
-        setExecutionId(match[1])
-        setPolling(true)
-        // Detect estimated time from agent response
-        const timeMatch = reply.match(/(\d+)[-–](\d+)\s*menit/i) || reply.match(/(\d+)[-–](\d+)\s*min/i)
-        const estTime = timeMatch ? `${timeMatch[1]}-${timeMatch[2]} minutes` : '10-20 minutes'
-        setMessages(prev => [...prev, { 
-          role: 'system', 
-          type: 'polling', 
-          text: `Report generation in progress. Estimated time: ~${estTime}. You will be notified automatically when complete.`
-        }])
+        setFocusId(match[1])
+        if (platformEnabled) {
+          setMessages(prev => [...prev, { role: 'system', type: 'info', text: 'The AgentCore orchestrator is supervising this run. It validates every section and repairs failures on its own. Follow the timeline on the right; the download appears there when the report is ready.' }])
+        } else {
+          setExecutionId(match[1])
+          setPolling(true)
+          const timeMatch = reply.match(/(\d+)[-–](\d+)\s*menit/i) || reply.match(/(\d+)[-–](\d+)\s*min/i)
+          const estTime = timeMatch ? `${timeMatch[1]}-${timeMatch[2]} minutes` : '10-20 minutes'
+          setMessages(prev => [...prev, {
+            role: 'system',
+            type: 'polling',
+            text: `Report generation in progress. Estimated time: ~${estTime}. You will be notified automatically when complete.`
+          }])
+        }
       }
     } catch (e) {
       setMessages(prev => [...prev, { role: 'system', type: 'error', text: `Connection error: ${e.message}` }])
@@ -85,19 +101,21 @@ export default function Chat() {
   function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
 
   return (
-    <div className="flex flex-col h-full animate-fade-in">
+    <div className="flex h-full animate-fade-in">
+    <div className="flex flex-col h-full flex-1 min-w-0">
       {/* Header */}
-      <div className={`px-8 py-5 border-b backdrop-blur-sm ${
-        isDark ? 'border-white/[0.06] bg-dark-800/50' : 'border-gray-100 bg-white/80'
-      }`}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-accent-blue to-accent-purple flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-white" />
+      <div className="relative overflow-hidden px-8 py-5 border-b border-white/[0.06]">
+        <img src="/img/city-night.jpg" alt="" className="absolute inset-0 w-full h-full object-cover opacity-25" style={{ objectPosition: 'center 40%' }} />
+        <div className="absolute inset-0 bg-gradient-to-r from-dark-900 via-dark-900/90 to-dark-900/60" />
+        <div className="relative flex items-center gap-4">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-accent-blue to-accent-teal flex items-center justify-center shadow-lg">
+            <Sparkles className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>ESG Chat Assistant</h2>
-            <p className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-400'}`}>Powered by Amazon Bedrock Agent</p>
+          <div className="flex-1">
+            <div className="eyebrow text-accent-teal mb-0.5">Workspace · Assistant</div>
+            <h2 className="text-xl font-display font-bold text-white tracking-tight">Ask, generate, and let the agent fix what fails</h2>
           </div>
+          {platformEnabled ? <Pill tone="green">AgentCore Runtime</Pill> : <Pill tone="slate">Bedrock Agent (legacy)</Pill>}
         </div>
       </div>
 
@@ -111,9 +129,9 @@ export default function Chat() {
               <Bot className="w-7 h-7 text-accent-blue" />
             </div>
             <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-800'}`}>Start a Conversation</h3>
-            <p className={`text-sm max-w-sm mx-auto mb-6 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>Ask questions about ESG frameworks or generate a sustainability report</p>
+            <p className={`text-sm max-w-sm mx-auto mb-6 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>Ask about ESG frameworks, compliance readiness, scenarios or GHG data, or generate a sustainability report</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {['Generate GRI 305 report for 2024', 'Create CSRD multi-framework report', 'What frameworks are supported?'].map((suggestion, i) => (
+              {['Generate GRI 305 report for 2024', 'Create a multi-framework report for 2024', 'How ready are we for PSPK?', 'Explain why a section failed validation'].map((suggestion, i) => (
                 <button key={i} onClick={() => setInput(suggestion)}
                   className={`px-4 py-2 rounded-xl text-xs transition-all ${
                     isDark
@@ -167,6 +185,13 @@ export default function Chat() {
           </button>
         </div>
       </div>
+    </div>
+    {platformEnabled && (
+      <aside className="w-[340px] shrink-0 border-l border-white/[0.06] bg-dark-800/40 overflow-y-auto p-5">
+        <div className="eyebrow mb-3">Agent activity</div>
+        <AgentActivity focusId={focusId} />
+      </aside>
+    )}
     </div>
   )
 }

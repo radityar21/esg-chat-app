@@ -3,6 +3,8 @@ import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } fro
 import { CheckCircle2, CircleDot, XCircle, ScanSearch, FileDiff, Wrench, Globe2 } from 'lucide-react'
 import { CHECKLIST, PILLARS, pillarScores, score, SOURCES, ALERTS_BASE, ALERT_NEW } from '../data/compliance'
 import { PageHeader, Panel, Gauge, Pill, Button, Tabs, C } from '../components/ui'
+import SourceBadge from '../components/SourceBadge'
+import { api, useLive, platformEnabled, CHAT_BASE } from '../lib/platform'
 
 const statusMeta = {
   ready: { icon: CheckCircle2, color: 'text-esg-green', label: 'Ready', tone: 'green' },
@@ -16,11 +18,14 @@ export default function Compliance() {
   const [fixed, setFixed] = useState(new Set())
   const [pillar, setPillar] = useState('all')
 
-  const base = score(CHECKLIST)
-  const now = score(CHECKLIST, fixed)
-  const ps = useMemo(() => pillarScores(fixed), [fixed])
-  const open = CHECKLIST.filter((i) => i.status !== 'ready' && !fixed.has(i.id))
-  const list = CHECKLIST.filter((i) => pillar === 'all' || i.pillar === pillar)
+  const readiness = useLive('/compliance/readiness?year=2024')
+  const alertsLive = useLive('/compliance/alerts')
+  const CHECK = readiness.status === 'live' ? readiness.data.items : CHECKLIST
+  const base = score(CHECK)
+  const now = score(CHECK, fixed)
+  const ps = useMemo(() => pillarScores(fixed, CHECK), [fixed, CHECK])
+  const open = CHECK.filter((i) => i.status !== 'ready' && !fixed.has(i.id))
+  const list = CHECK.filter((i) => pillar === 'all' || i.pillar === pillar)
 
   const toggle = (id) => setFixed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
@@ -28,16 +33,27 @@ export default function Compliance() {
   const [scanState, setScanState] = useState('idle') // idle | scanning | done
   const [progress, setProgress] = useState(-1)
   const [showDiff, setShowDiff] = useState(false)
+  const [scanResult, setScanResult] = useState(null)
+  const [scanError, setScanError] = useState(null)
   const timer = useRef()
   const runScan = () => {
-    setScanState('scanning'); setProgress(0); setShowDiff(false)
+    setScanState('scanning'); setProgress(0); setShowDiff(false); setScanError(null)
     let i = 0
+    const live = platformEnabled
+    // Live: the animation keeps cycling until the API answers. Demo: it plays once and reveals the simulated alert.
     timer.current = setInterval(() => {
-      i += 1; setProgress(i)
-      if (i >= SOURCES.length) { clearInterval(timer.current); setTimeout(() => setScanState('done'), 500) }
+      i += 1; setProgress(live ? i % SOURCES.length : i)
+      if (!live && i >= SOURCES.length) { clearInterval(timer.current); setTimeout(() => setScanState('done'), 500) }
     }, 650)
+    if (live) {
+      api('/compliance/scan', { method: 'POST', base: CHAT_BASE, timeout: 120000 })
+        .then((r) => { setScanResult(r); alertsLive.reload() })
+        .catch((e) => setScanError(e.message))
+        .finally(() => { clearInterval(timer.current); setProgress(SOURCES.length); setScanState('done') })
+    }
   }
-  const alerts = scanState === 'done' ? [ALERT_NEW, ...ALERTS_BASE] : ALERTS_BASE
+  const liveAlerts = alertsLive.status === 'live' ? alertsLive.data.alerts : null
+  const alerts = liveAlerts ?? (scanState === 'done' ? [ALERT_NEW, ...ALERTS_BASE] : ALERTS_BASE)
 
   return (
     <div className="flex-1 overflow-y-auto p-10 animate-fade-in">
@@ -46,6 +62,7 @@ export default function Compliance() {
         title="How ready are we for PSPK, and what just changed?"
         desc="Existing curated data is scored against the PSPK 1 & 2 checklist, while regulatory sources are watched continuously for changes that touch your report templates."
         image="/img/forest-aerial-2.jpg"
+        badge={<SourceBadge status={readiness.status} error={readiness.error} />}
       >
         <Tabs value={tab} onChange={setTab} tabs={[{ id: 'gap', label: 'Gap Analyzer' }, { id: 'reg', label: 'Regulatory Change Detection' }]} />
       </PageHeader>
@@ -58,7 +75,7 @@ export default function Compliance() {
                 <Gauge value={Math.round(now)} label="Ready for PSPK" sublabel={fixed.size ? `+${(now - base).toFixed(1)} pts from simulated fixes` : 'Based on current curated data'} />
                 <div className="grid grid-cols-3 gap-2 w-full mt-4 text-center">
                   {['ready', 'partial', 'gap'].map((s) => {
-                    const n = CHECKLIST.filter((i) => (fixed.has(i.id) ? 'ready' : i.status) === s).length
+                    const n = CHECK.filter((i) => (fixed.has(i.id) ? 'ready' : i.status) === s).length
                     return <div key={s} className="rounded-xl bg-white/[0.04] py-2"><div className={`text-xl font-display font-bold ${statusMeta[s].color}`}>{n}</div><div className="text-[10px] uppercase tracking-wider text-white/40">{statusMeta[s].label}</div></div>
                   })}
                 </div>
@@ -112,6 +129,7 @@ export default function Compliance() {
                         <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: p.color + '22', color: p.color }}>{p.name}</span>
                         <span className="text-[10px] text-white/30">weight {i.w}</span>
                       </div>
+                      {i.evidence && <div className="text-[11px] text-white/35 mt-1">Evidence: {i.evidence}</div>}
                       {i.status !== 'ready' && (
                         <div className="mt-1.5 text-xs text-white/55 leading-relaxed">
                           <span className="text-white/35">Source system:</span> <span className="text-accent-blue">{i.system}</span><br />
@@ -135,7 +153,7 @@ export default function Compliance() {
 
       {tab === 'reg' && (
         <div className="grid grid-cols-12 gap-5">
-          <Panel className="col-span-4" title="Monitored sources" subtitle="Scheduled crawler · every 6 hours"
+          <Panel className="col-span-4" title="Monitored sources" subtitle="Scheduled crawler · daily"
             right={<Button icon={ScanSearch} onClick={runScan} disabled={scanState === 'scanning'}>{scanState === 'scanning' ? 'Scanning…' : 'Run scan now'}</Button>}>
             <div className="space-y-2.5">
               {SOURCES.map((s, idx) => {
@@ -151,6 +169,8 @@ export default function Compliance() {
                 )
               })}
             </div>
+            {scanError && <div className="mt-4 text-xs text-esg-red">Scan failed: {scanError}</div>}
+            {scanResult && <div className="mt-4 text-xs text-white/60">{scanResult.new} new item(s) found{scanResult.errors?.length ? `, ${scanResult.errors.length} source(s) unreachable` : ''}.</div>}
             <div className="mt-5 text-[11px] text-white/35 leading-relaxed">Detected changes are classified by an LLM against the section map of your report templates, then routed to the owning team.</div>
           </Panel>
 
@@ -163,10 +183,10 @@ export default function Compliance() {
                     {a.isNew && <Pill tone="red">NEW</Pill>}
                     <span className="text-[11px] text-white/40">{a.source} · {a.date} · {a.id}</span>
                   </div>
-                  <div className="text-sm font-medium text-white leading-snug">{a.title}</div>
-                  <div className="text-xs text-white/50 mt-1.5">Impacts: {a.impact.join(' · ')} <span className="text-white/25">| checklist {a.checklist}</span></div>
+                  <div className="text-sm font-medium text-white leading-snug">{a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="hover:underline">{a.title}</a> : a.title}</div>
+                  <div className="text-xs text-white/50 mt-1.5">Impacts: {(a.impact || []).join(' · ')} {a.checklist && <span className="text-white/25">| checklist {a.checklist}</span>}</div>
                   <div className="text-xs text-white/70 mt-1">Suggested: {a.action}</div>
-                  {a.isNew && (
+                  {a.isNew && a.templateBefore && (
                     <div className="mt-3">
                       <Button variant="ghost" icon={FileDiff} onClick={() => setShowDiff(!showDiff)}>{showDiff ? 'Hide' : 'Preview'} template update</Button>
                       {showDiff && (

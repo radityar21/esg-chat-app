@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid, LineChart, Line, Legend } from 'recharts'
 import { Check, X, Download } from 'lucide-react'
-import { PART1, PART2, PART3, PART4, GASES, GAS_NAMES, BASE_YEAR, PART6, TREND, totals, part6Coverage } from '../data/ghg'
+import { DEMO_DATASET, GAS_NAMES, datasetFromApi } from '../data/ghg'
+import { useLive } from '../lib/platform'
+import SourceBadge from '../components/SourceBadge'
 import { PageHeader, Panel, Tabs, Stat, Pill, Button, tooltipProps, axisTick, C, fmt } from '../components/ui'
 import { Flame, Scale, Database, ClipboardCheck } from 'lucide-react'
 
@@ -22,19 +24,24 @@ function download(name, text) {
 
 export default function GhgInventory() {
   const [tab, setTab] = useState('p2')
-  const t = totals()
-  const cov = part6Coverage()
+  const cur = useLive('/ghg/inventory?year=2024')
+  const base = useLive('/ghg/inventory?year=2023')
+  const ds = cur.status === 'live' && base.status === 'live' ? datasetFromApi(cur.data, base.data) : DEMO_DATASET
+  const status = cur.status === 'error' || base.status === 'error' ? 'error' : cur.status === 'loading' || base.status === 'loading' ? 'loading' : cur.status
+  const { PART1, PART2, PART3, PART4, GASES, BASE_YEAR, PART6, TREND, YEAR } = ds
+  const t = ds.totals
+  const cov = ds.part6Coverage
 
   const exportCsv = () => {
     const rows = [['Scope / category', 'Included', 'Reporting year tCO2e', `Base year ${BASE_YEAR} tCO2e`]]
     PART2.forEach((r) => rows.push([r.label, r.inc ? 'yes' : 'excluded', r.v ?? '', r.base ?? '']))
-    download('ghg_inventory_FY2025.csv', rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n'))
+    download(`ghg_inventory_FY${YEAR}.csv`, rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n'))
   }
 
   return (
     <div className="flex-1 overflow-y-auto p-10 animate-fade-in">
       <PageHeader eyebrow="GHG Inventory · GHG Protocol Corporate Value Chain (Scope 3) template" title="The inventory behind every report" desc="Structured exactly like the GHG Protocol reporting template, so one curated dataset feeds PSPK, GRI, IFRS S2 and CSRD."
-        image="/img/forest-aerial-2.jpg" pos="center 70%">
+        image="/img/forest-aerial-2.jpg" pos="center 70%" badge={<SourceBadge status={status} error={cur.error || base.error} />}>
         <Button variant="ghost" icon={Download} onClick={exportCsv}>Export CSV</Button>
       </PageHeader>
 
@@ -57,13 +64,13 @@ export default function GhgInventory() {
 
       {tab === 'p2' && (
         <div className="grid grid-cols-12 gap-5">
-          <Panel className="col-span-7" title="Part 2 · Greenhouse gas emissions data" subtitle="Metric tons CO2e, reporting year 2025" pad={false}>
+          <Panel className="col-span-7" title="Part 2 · Greenhouse gas emissions data" subtitle={`Metric tons CO2e, reporting year ${YEAR}`} pad={false}>
             <table className="w-full text-sm">
               <tbody>
                 {PART2.map((r) => (
                   <tr key={r.k} className="border-t border-white/[0.05] row-hover">
                     <td className="px-6 py-2 text-white/85">{r.label}</td>
-                    <td className="px-6 py-2 text-right tabular-nums">{r.inc ? <span className={r.k === 'c15' ? 'text-accent-purple font-semibold' : 'text-white'}>{fmt(r.v)}</span> : <Pill tone="slate">excluded</Pill>}</td>
+                    <td className="px-6 py-2 text-right tabular-nums">{r.inc ? <span className={r.k === 'c15' ? 'text-accent-purple font-semibold' : 'text-white'}>{fmt(r.v)}</span> : <Pill tone="slate">{r.note ? 'not measured' : 'excluded'}</Pill>}</td>
                   </tr>
                 ))}
                 <tr className="border-t-2 border-white/15"><td className="px-6 py-3 font-semibold text-white">Total</td><td className="px-6 py-3 text-right font-semibold text-white tabular-nums">{fmt(t.total)}</td></tr>
@@ -75,7 +82,7 @@ export default function GhgInventory() {
               <table className="w-full text-xs">
                 <thead><tr className="text-white/40"><th className="text-left py-1"></th>{GAS_NAMES.map((g) => <th key={g} className="text-right py-1">{g}</th>)}</tr></thead>
                 <tbody>
-                  {GASES.map((g) => <tr key={g.scope} className="border-t border-white/[0.05]"><td className="py-2 text-white/70">{g.scope}</td>{g.vals.map((v, i) => <td key={i} className="text-right tabular-nums text-white">{fmt(v)}</td>)}</tr>)}
+                  {GASES.map((g) => <tr key={g.scope} className="border-t border-white/[0.05]"><td className="py-2 text-white/70">{g.scope}</td>{(g.vals || GAS_NAMES.map(() => null)).map((v, i) => <td key={i} className="text-right tabular-nums text-white">{v == null ? '–' : fmt(v)}</td>)}</tr>)}
                 </tbody>
               </table>
             </Panel>
@@ -118,13 +125,13 @@ export default function GhgInventory() {
 
       {tab === 'p5' && (
         <div className="grid grid-cols-12 gap-5">
-          <Panel className="col-span-7" title={`Part 5 · Base year ${BASE_YEAR} vs 2025`} pad={false}>
+          <Panel className="col-span-7" title={`Part 5 · Base year ${BASE_YEAR} vs ${YEAR}`} pad={false}>
             <table className="w-full text-sm">
-              <thead><tr className="text-left text-white/40 text-xs"><th className="px-6 py-2">Scope / category</th><th className="px-3 py-2 text-right">{BASE_YEAR}</th><th className="px-3 py-2 text-right">2025</th><th className="px-6 py-2 text-right">Change</th></tr></thead>
+              <thead><tr className="text-left text-white/40 text-xs"><th className="px-6 py-2">Scope / category</th><th className="px-3 py-2 text-right">{BASE_YEAR}</th><th className="px-3 py-2 text-right">{YEAR}</th><th className="px-6 py-2 text-right">Change</th></tr></thead>
               <tbody>
-                {PART2.filter((r) => r.inc).map((r) => {
-                  const d = ((r.v - r.base) / r.base) * 100
-                  return <tr key={r.k} className="border-t border-white/[0.05] row-hover"><td className="px-6 py-2 text-white/80">{r.label}</td><td className="px-3 text-right tabular-nums text-white/60">{fmt(r.base)}</td><td className="px-3 text-right tabular-nums text-white">{fmt(r.v)}</td><td className={`px-6 text-right tabular-nums ${d <= 0 ? 'text-esg-green' : 'text-esg-amber'}`}>{d > 0 ? '+' : ''}{d.toFixed(1)}%</td></tr>
+                {PART2.filter((r) => r.inc && r.v != null).map((r) => {
+                  const d = r.base ? ((r.v - r.base) / r.base) * 100 : null
+                  return <tr key={r.k} className="border-t border-white/[0.05] row-hover"><td className="px-6 py-2 text-white/80">{r.label}</td><td className="px-3 text-right tabular-nums text-white/60">{r.base == null ? '–' : fmt(r.base)}</td><td className="px-3 text-right tabular-nums text-white">{fmt(r.v)}</td><td className={`px-6 text-right tabular-nums ${d == null ? 'text-white/40' : d <= 0 ? 'text-esg-green' : 'text-esg-amber'}`}>{d == null ? '–' : `${d > 0 ? '+' : ''}${d.toFixed(1)}%`}</td></tr>
                 })}
               </tbody>
             </table>

@@ -42,8 +42,8 @@ export const score = (items, fixed = new Set()) => {
   return (items.reduce((a, i) => a + i.w * cov(i), 0) / tot) * 100
 }
 
-export const pillarScores = (fixed = new Set()) =>
-  PILLARS.map((p) => ({ ...p, score: score(CHECKLIST.filter((i) => i.pillar === p.id), fixed) }))
+export const pillarScores = (fixed = new Set(), items = CHECKLIST) =>
+  PILLARS.map((p) => ({ ...p, score: score(items.filter((i) => i.pillar === p.id), fixed) }))
 
 // ── Regulatory change detection (simulated feed) ──────────────────────────
 export const SOURCES = [

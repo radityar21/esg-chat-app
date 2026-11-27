@@ -1,12 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ReferenceLine, CartesianGrid } from 'recharts'
 import { Check, Minus, FileText, Wand2, Copy } from 'lucide-react'
-import { FRAMEWORKS, TOPICS, overlapOf, overlapStats, renderDisclosure, SCENARIOS, runScenario, narrative } from '../data/frameworks'
+import { FRAMEWORKS, TOPICS, overlapOf, overlapStats, renderDisclosure, SCENARIOS, runScenario, narrative, scenarioFromApi } from '../data/frameworks'
 import { PageHeader, Panel, Tabs, Slider, Pill, Button, Stat, tooltipProps, axisTick, C } from '../components/ui'
 import { FileStack, Layers3, CopyCheck } from 'lucide-react'
+import SourceBadge from '../components/SourceBadge'
+import { useDebouncedPost } from '../lib/platform'
 
 export default function Frameworks() {
   const [tab, setTab] = useState('diff')
+  const [scenStatus, setScenStatus] = useState({ status: 'demo' })
   return (
     <div className="flex-1 overflow-y-auto p-10 animate-fade-in">
       <PageHeader
@@ -14,10 +17,11 @@ export default function Frameworks() {
         title="One dataset in. Every framework out."
         desc="PSPK, GRI, IFRS S2 and CSRD sections are generated at once from the same curated data, then forward-looking climate scenarios flow straight into the Risk Management section."
         image="/img/city-night.jpg" pos="center 35%"
+        badge={tab === 'scen' ? <SourceBadge status={scenStatus.status} error={scenStatus.error} /> : undefined}
       >
         <Tabs value={tab} onChange={setTab} tabs={[{ id: 'diff', label: 'Regulatory diff view' }, { id: 'scen', label: 'Scenario engine & what-if' }]} />
       </PageHeader>
-      {tab === 'diff' ? <DiffView /> : <ScenarioView />}
+      {tab === 'diff' ? <DiffView /> : <ScenarioView onStatus={setScenStatus} />}
     </div>
   )
 }
@@ -87,17 +91,25 @@ function DiffView() {
   )
 }
 
-function ScenarioView() {
+function ScenarioView({ onStatus }) {
   const [wi, setWi] = useState({ carbon: null, shift: 0, flood: 22, boost: 0 })
   const [pick, setPick] = useState('s2')
   const [inserted, setInserted] = useState(false)
   const opts = { carbonOverride: wi.carbon, shiftPct: wi.shift, flood: wi.flood, greenBoost: wi.boost }
-  const results = useMemo(() => SCENARIOS.map((s) => runScenario(s, opts)), [wi])
-  const base = useMemo(() => SCENARIOS.map((s) => runScenario(s, {})), [])
-  const cur = results.find((r) => r.sc.id === pick)
+  const changed = wi.carbon != null || wi.shift !== 0 || wi.flood !== 22 || wi.boost !== 0
+  // Live: the API runs the same screening model on the loan book. An unchanged baseline is sent without `whatif`, so it is stored as scenario evidence.
+  const liveBody = { year: 2024, ...(changed ? { whatif: { ...(wi.carbon != null ? { carbon_override: wi.carbon } : {}), shift_pct: wi.shift, flood_share_pct: wi.flood, green_boost_pp: wi.boost } } : {}) }
+  const liveCur = useDebouncedPost('/scenario', liveBody)
+  const liveBase = useDebouncedPost('/scenario', { year: 2024 })
+  const useLiveData = liveCur.status === 'live' && liveBase.status === 'live'
+  useEffect(() => { onStatus({ status: liveCur.status === 'error' || liveBase.status === 'error' ? 'error' : useLiveData ? 'live' : liveCur.status, error: liveCur.error || liveBase.error }) }, [liveCur.status, liveBase.status, liveCur.error, liveBase.error, useLiveData])
+  const demoResults = useMemo(() => SCENARIOS.map((s) => runScenario(s, opts)), [wi])
+  const demoBase = useMemo(() => SCENARIOS.map((s) => runScenario(s, {})), [])
+  const results = useLiveData ? scenarioFromApi(liveCur.data) : demoResults
+  const base = useLiveData ? scenarioFromApi(liveBase.data) : demoBase
+  const cur = results.find((r) => r.sc.id === pick) || results[0]
   const chart = results.map((r, i) => ({ name: r.sc.short, Transition: -r.transition, Physical: -r.physical, Opportunity: r.opportunity, net: r.net, base: base[i].net }))
   const sectorData = [...cur.bySector].sort((a, b) => b.decl - a.decl).map((s) => ({ name: s.name, decl: Number(s.decl.toFixed(2)) }))
-  const changed = wi.carbon != null || wi.shift !== 0 || wi.flood !== 22 || wi.boost !== 0
 
   return (
     <div className="grid grid-cols-12 gap-5">
@@ -139,8 +151,8 @@ function ScenarioView() {
             {results.map((r, i) => (
               <button key={r.sc.id} onClick={() => setPick(r.sc.id)} className={`rounded-xl p-3.5 text-left border transition ${pick === r.sc.id ? 'border-white/30 bg-white/[0.07]' : 'border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.05]'}`}>
                 <div className="text-[11px] font-semibold" style={{ color: r.sc.color }}>{r.sc.name}</div>
-                <div className="font-display text-2xl font-bold text-white mt-1">{r.net >= 0 ? '+' : '−'}{Math.abs(r.net).toFixed(1)}<span className="text-xs text-white/40 ml-1">IDR tn</span></div>
-                {changed && <div className="text-[10px] text-white/40 mt-0.5">vs baseline {base[i].net.toFixed(1)}</div>}
+                <div className="font-display text-2xl font-bold text-white mt-1">{r.net >= 0 ? '+' : '−'}{Math.abs(r.net).toFixed(Math.abs(r.net) < 10 ? 2 : 1)}<span className="text-xs text-white/40 ml-1">IDR tn</span></div>
+                {changed && <div className="text-[10px] text-white/40 mt-0.5">vs baseline {base[i].net.toFixed(Math.abs(base[i].net) < 10 ? 2 : 1)}</div>}
               </button>
             ))}
           </div>
@@ -161,7 +173,7 @@ function ScenarioView() {
           </Panel>
           <Panel title="Auto-generated disclosure" subtitle="Risk Management section · narrative"
             right={<Button variant="ghost" icon={inserted ? Check : Wand2} onClick={() => setInserted(true)}>{inserted ? 'Inserted' : 'Insert into report'}</Button>}>
-            <p className="text-[13px] text-white/75 leading-relaxed">{narrative(cur)}</p>
+            <p className="text-[13px] text-white/75 leading-relaxed">{cur.text || narrative(cur)}</p>
             {inserted && <div className="mt-3 text-[11px] text-esg-green">Added to “Risk Management → Climate scenario analysis” in the draft PSPK, IFRS S2 and CSRD reports.</div>}
           </Panel>
         </div>

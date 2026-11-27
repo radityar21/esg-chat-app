@@ -136,14 +136,14 @@ export function Gauge({ value, size = 220, label = 'Readiness', sublabel }) {
   )
 }
 
-export function PageHeader({ eyebrow, title, desc, image = '/img/forest-aerial-2.jpg', children, pos = 'center' }) {
+export function PageHeader({ eyebrow, title, desc, image = '/img/forest-aerial-2.jpg', children, pos = 'center', badge }) {
   return (
     <div className="relative rounded-3xl overflow-hidden mb-8 border border-white/[0.07]">
       <img src={image} alt="" className="absolute inset-0 w-full h-full object-cover opacity-50" style={{ objectPosition: pos }} />
       <div className="absolute inset-0 bg-gradient-to-r from-dark-900 via-dark-900/85 to-dark-900/30" />
       <div className="relative px-9 py-9 flex items-end justify-between gap-6">
         <div className="max-w-2xl">
-          <div className="eyebrow text-accent-teal mb-2">{eyebrow}</div>
+          <div className="flex items-center gap-3 mb-2"><div className="eyebrow text-accent-teal">{eyebrow}</div>{badge}</div>
           <h1 className="text-[34px] leading-tight font-display font-bold text-white tracking-tight">{title}</h1>
           {desc && <p className="text-sm text-white/60 mt-2.5 leading-relaxed">{desc}</p>}
         </div>

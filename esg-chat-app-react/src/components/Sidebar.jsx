@@ -1,5 +1,6 @@
 import { LayoutGrid, ShieldCheck, FileStack, Layers, Cpu, Flame, MessageSquare, FileText, BookOpen, Leaf } from 'lucide-react'
 import { BANK } from '../data/bank'
+import { platformEnabled } from '../lib/platform'
 
 export const NAV = [
   { group: 'Platform', items: [
@@ -52,8 +53,8 @@ export default function Sidebar({ active, onNavigate }) {
       </nav>
 
       <div className="m-4 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
-        <div className="flex items-center gap-2 mb-1.5"><span className="w-2 h-2 rounded-full bg-esg-green animate-pulse" /><span className="text-[11px] text-white/60">All systems online</span></div>
-        <div className="text-[10px] text-white/30 leading-relaxed">Synthetic demo data<br />Made by Tokaicom Mitra Indonesia</div>
+        <div className="flex items-center gap-2 mb-1.5"><span className="w-2 h-2 rounded-full bg-esg-green animate-pulse" /><span className="text-[11px] text-white/60">{platformEnabled ? 'Platform connected' : 'Demo mode'}</span></div>
+        <div className="text-[10px] text-white/30 leading-relaxed">{platformEnabled ? 'Live data from AWS' : 'Synthetic demo data'}<br />Made by Tokaicom Mitra Indonesia</div>
       </div>
     </aside>
   )

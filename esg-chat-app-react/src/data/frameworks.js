@@ -99,3 +99,15 @@ export function narrative(r) {
   const worst = [...r.bySector].sort((a, b) => b.decl - a.decl)[0]
   return `Under the ${r.sc.name} scenario (carbon price USD ${Math.round(r.carbon)}/tCO2e by 2030), ${BANK.name} estimates additional expected credit losses of IDR ${f1(r.transition)} trillion from transition risk, concentrated in ${worst.name.toLowerCase()} (IDR ${f1(worst.decl)} trillion). Physical risk to property collateral adds IDR ${f1(r.physical)} trillion. Growth in green financing is expected to contribute IDR ${f1(r.opportunity)} trillion of incremental net interest income over five years. The net effect is IDR ${f1(r.net)} trillion. Combined transition and physical losses equal ${r.pctLoans.toFixed(2)}% of total loans.`
 }
+
+// Adapt POST /scenario output to the shape runScenario() returns.
+export function scenarioFromApi(res) {
+  return SCENARIOS.map((sc) => {
+    const r = res.scenarios.find((x) => x.scenario_id === sc.id)
+    if (!r) return null
+    return {
+      sc, carbon: r.carbon_price_usd_per_t, transition: r.transition_delta_ecl_tn, physical: r.physical_loss_tn, opportunity: r.green_opportunity_tn, net: r.net_impact_tn,
+      bySector: r.by_sector.map((b) => ({ name: b.sector, decl: b.delta_ecl_tn })), pctLoans: r.downside_pct_of_loans, text: res.narratives?.[sc.id],
+    }
+  }).filter(Boolean)
+}

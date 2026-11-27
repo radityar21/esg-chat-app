@@ -97,3 +97,29 @@ export const totals = () => {
 }
 
 export const part6Coverage = () => Math.round((PART6.filter((p) => p[1]).length / PART6.length) * 100)
+
+export const YEAR = 2025
+export const DEMO_DATASET = {
+  PART1, PART2, PART3, PART4, GASES, PART6, TREND, BASE_YEAR, YEAR,
+  totals: (() => { const t = totals(); return { total: t.total, baseTotal: t.baseTotal, ops: t.ops, fin: t.fin, finShare: t.finShare, change: t.change } })(),
+  part6Coverage: part6Coverage(),
+}
+
+// Build the same dataset shape from two /ghg/inventory responses (reporting year and base year).
+export function datasetFromApi(cur, base) {
+  const sum = (inv, keys) => inv.part2.filter((r) => keys.includes(r.k) && r.v != null).reduce((a, r) => a + r.v, 0)
+  const t = cur.totals
+  return {
+    PART1: cur.part1,
+    PART2: cur.part2,
+    PART3: cur.part3,
+    PART4: cur.part4,
+    GASES: cur.gases.map((g) => ({ scope: g.scope, vals: g.available ? g.vals : null })),
+    PART6: cur.part6,
+    TREND: [base, cur].map((inv) => ({ year: inv.year, s12: sum(inv, ['s1', 's2']), fin: sum(inv, ['c15']) })),
+    BASE_YEAR: cur.base_year,
+    YEAR: cur.year,
+    totals: { total: t.total, baseTotal: t.base_total, ops: t.ops, fin: t.fin, finShare: t.fin_share ?? 0, change: t.change_pct ?? 0 },
+    part6Coverage: cur.part6_coverage,
+  }
+}

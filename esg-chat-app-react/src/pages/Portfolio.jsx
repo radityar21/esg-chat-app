@@ -1,39 +1,42 @@
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, ComposedChart, Line, Area, CartesianGrid, RadarChart, PolarGrid, PolarAngleAxis, Radar, Legend, ReferenceLine } from 'recharts'
 import { Gauge as GaugeIcon, Leaf, Trophy, ArrowRight } from 'lucide-react'
-import { PCAF_CLASSES, PCAF_COLORS, scoreDistribution, portfolioScore, weightedScore, TKBI, GREEN_TREND, TKBI_SECTORS, PEERS, composite, WEIGHTS } from '../data/portfolio'
-import { BANK } from '../data/bank'
+import { PCAF_COLORS, scoreDistribution, portfolioScore, weightedScore, WEIGHTS, DEMO_DATASET, datasetFromApi } from '../data/portfolio'
+import SourceBadge from '../components/SourceBadge'
+import { useLive } from '../lib/platform'
 import { PageHeader, Panel, Tabs, Stat, Pill, tooltipProps, axisTick, C, CountUp } from '../components/ui'
 
 export default function Portfolio() {
   const [tab, setTab] = useState('pcaf')
+  const live = useLive('/portfolio?year=2024')
+  const ds = live.status === 'live' ? datasetFromApi(live.data) : DEMO_DATASET
   return (
     <div className="flex-1 overflow-y-auto p-10 animate-fade-in">
       <PageHeader eyebrow="Capability 3 · ESG Data Quality & Portfolio Analytics" title="How good is our data, how green is our book, where do we rank?"
         desc="PCAF data-quality scoring, TKBI-aligned green finance tracking and peer benchmarking, in one view for the C-suite."
-        image="/img/city-night.jpg" pos="center 60%">
+        image="/img/city-night.jpg" pos="center 60%" badge={<SourceBadge status={live.status} error={live.error} />}>
         <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pcaf', label: 'PCAF data quality' }, { id: 'green', label: 'Green finance (TKBI)' }, { id: 'peer', label: 'Peer benchmark' }]} />
       </PageHeader>
-      {tab === 'pcaf' && <Pcaf />}
-      {tab === 'green' && <Green />}
-      {tab === 'peer' && <Peer />}
+      {tab === 'pcaf' && <Pcaf ds={ds} />}
+      {tab === 'green' && <Green ds={ds} />}
+      {tab === 'peer' && <Peer ds={ds} />}
     </div>
   )
 }
 
-function Pcaf() {
+function Pcaf({ ds }) {
   const [upgrade, setUpgrade] = useState(false)
-  const cur = portfolioScore(false)
-  const tgt = portfolioScore(true)
-  const shown = portfolioScore(upgrade)
-  const dist = scoreDistribution(upgrade)
-  const classRows = PCAF_CLASSES.map((c) => ({ ...c, s: weightedScore(upgrade ? c.target : c.dist) }))
+  const cur = portfolioScore(false, ds.PCAF)
+  const tgt = portfolioScore(true, ds.PCAF)
+  const shown = portfolioScore(upgrade, ds.PCAF)
+  const dist = scoreDistribution(upgrade, ds.PCAF)
+  const classRows = ds.PCAF.map((c) => ({ ...c, s: weightedScore(upgrade ? c.target : c.dist) }))
   return (
     <>
       <div className="grid grid-cols-4 gap-5 mb-5">
         <Stat icon={GaugeIcon} label="Weighted PCAF score" value={shown} decimals={1} sub={upgrade ? `improved from ${cur.toFixed(1)}` : '1 = best (audited), 5 = estimated'} tone={upgrade ? 'teal' : 'amber'} />
-        <Stat label="Financed emissions" value={BANK.scope3Cat15 / 1e6} decimals={2} suffix=" Mt" sub="99% of the total GHG inventory" tone="purple" />
-        <Stat label="Loan book covered" value={520} suffix=" tn" sub="IDR, six PCAF asset classes" tone="blue" />
+        <Stat label="Financed emissions" value={ds.financedMt} decimals={2} suffix=" Mt" sub="Scope 3 Cat 15, attributed to the bank" tone="purple" />
+        <Stat label="Loan book covered" value={ds.loanTn} decimals={ds.loanTn < 100 ? 1 : 0} suffix=" tn" sub={`IDR, ${ds.PCAF.length} PCAF asset classes`} tone="blue" />
         <div className="panel p-5 flex flex-col justify-center">
           <div className="eyebrow mb-2">Improvement advisor</div>
           <button onClick={() => setUpgrade(!upgrade)} className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${upgrade ? 'bg-esg-green/15 text-esg-green border border-esg-green/30' : 'bg-gradient-to-r from-accent-blue to-accent-teal text-dark-900'}`}>{upgrade ? 'Showing 12-month plan' : 'Apply 12-month upgrade plan'}</button>
@@ -80,10 +83,11 @@ function Pcaf() {
   )
 }
 
-function Green() {
+function Green({ ds }) {
+  const { TKBI, GREEN_TREND, TKBI_SECTORS } = ds
   const total = TKBI.reduce((a, t) => a + t.value, 0)
   const green = (TKBI[0].value / total) * 100
-  const gap2030 = 40 - GREEN_TREND.find((g) => g.year === '2030').proj
+  const gap2030 = ds.target2030 - GREEN_TREND.find((g) => g.year === '2030').proj
   return (
     <>
       <div className="grid grid-cols-4 gap-5 mb-5">
@@ -93,7 +97,7 @@ function Green() {
         <Stat label="2030 target gap" value={Math.abs(gap2030)} decimals={1} prefix={gap2030 <= 0 ? '+' : '−'} suffix=" pp" sub="Projection vs action-plan target" tone={gap2030 <= 0 ? 'teal' : 'amber'} />
       </div>
       <div className="grid grid-cols-12 gap-5">
-        <Panel className="col-span-4" title="Portfolio composition" subtitle="IDR 520 tn lending book">
+        <Panel className="col-span-4" title="Portfolio composition" subtitle={`IDR ${Math.round(total)} tn lending book`}>
           <div className="h-56 relative">
             <ResponsiveContainer>
               <PieChart><Pie data={TKBI} dataKey="value" innerRadius={62} outerRadius={92} paddingAngle={3} stroke="none">{TKBI.map((t) => <Cell key={t.name} fill={t.color} />)}</Pie><Tooltip {...tooltipProps} formatter={(v) => `IDR ${v} tn`} /></PieChart>
@@ -114,8 +118,8 @@ function Green() {
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Area dataKey="actual" name="Actual" stroke={C.teal} strokeWidth={3} fill="url(#gg)" dot={{ r: 4 }} connectNulls />
                 <Line dataKey="proj" name="Projection" stroke={C.blue} strokeWidth={2.5} strokeDasharray="6 4" dot={false} />
-                <Line dataKey="target" name="Target (RAKB)" stroke={C.amber} strokeWidth={2} dot={false} />
-                <ReferenceLine x="2025" stroke="rgba(255,255,255,0.2)" label={{ value: 'today', fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
+                <Line dataKey="target" name={ds.illustrativeTarget ? `2030 target (${ds.target2030}%)` : 'Target (RAKB)'} stroke={C.amber} strokeWidth={2} dot={false} />
+                <ReferenceLine x={ds.todayYear} stroke="rgba(255,255,255,0.2)" label={{ value: 'today', fill: 'rgba(255,255,255,0.4)', fontSize: 10 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -137,17 +141,20 @@ function Green() {
   )
 }
 
-function Peer() {
+function Peer({ ds }) {
+  const PEERS = ds.PEERS
+  const composite = (p) => p.c ?? p.E * WEIGHTS.E + p.S * WEIGHTS.S + p.G * WEIGHTS.G
   const ranked = [...PEERS].map((p) => ({ ...p, c: composite(p) })).sort((a, b) => b.c - a.c)
   const us = ranked.findIndex((p) => p.us) + 1
-  const best = PEERS.find((p) => p.id === 'ra')
-  const bns = PEERS[0]
-  const radar = ['E', 'S', 'G'].map((k) => ({ pillar: { E: 'Environment', S: 'Social', G: 'Governance' }[k], BNS: bns[k], Peers: Math.round(PEERS.slice(1).reduce((a, p) => a + p[k], 0) / (PEERS.length - 1)), Leader: best[k] }))
+  const others = ranked.filter((p) => !p.us)
+  const best = others[0]
+  const bns = PEERS.find((p) => p.us)
+  const radar = ['E', 'S', 'G'].map((k) => ({ pillar: { E: 'Environment', S: 'Social', G: 'Governance' }[k], BNS: bns[k], Peers: Math.round(others.reduce((a, p) => a + p[k], 0) / others.length), Leader: best[k] }))
   const metrics = [
     { k: 'intensity', label: 'Carbon intensity (tCO2e / IDR bn lent)', low: true, d: 1 },
     { k: 'green', label: 'Green finance ratio (%)', d: 1 },
     { k: 'fem', label: 'Women in management (%)', d: 0 },
-  ]
+  ].filter((m) => PEERS.every((p) => p[m.k] != null))
   return (
     <div className="grid grid-cols-12 gap-5">
       <Panel className="col-span-5" title="Pillar scores vs peers" subtitle={`Weighted E ${WEIGHTS.E * 100}% · S ${WEIGHTS.S * 100}% · G ${WEIGHTS.G * 100}%`}>
@@ -164,7 +171,7 @@ function Peer() {
           </ResponsiveContainer>
         </div>
       </Panel>
-      <Panel className="col-span-7" title="Ranking" subtitle="Composite ESG score, 2025" right={<Pill tone="green"><Trophy size={11} /> We are #{us} of {PEERS.length}</Pill>} pad={false}>
+      <Panel className="col-span-7" title="Ranking" subtitle={`Composite ESG score, ${ds.yearLabel} (peer scores illustrative)`} right={<Pill tone="green"><Trophy size={11} /> We are #{us} of {PEERS.length}</Pill>} pad={false}>
         <table className="w-full text-sm">
           <thead><tr className="text-white/40 text-xs text-left"><th className="px-6 py-2">#</th><th>Institution</th><th className="text-right">E</th><th className="text-right">S</th><th className="text-right">G</th><th className="text-right px-6">Composite</th></tr></thead>
           <tbody>

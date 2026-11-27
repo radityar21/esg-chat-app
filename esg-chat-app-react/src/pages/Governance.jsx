@@ -4,17 +4,23 @@ import { ShieldAlert, Lock, Cpu, Coins, ArrowRight, Database, ScanEye, EyeOff, B
 import { HR_ROWS, COLUMN_CLASS, maskRow, maskText, SAMPLE_NOTE, MODELS, TASKS, runCosts, singleCall } from '../data/governance'
 import { SUBSIDIARIES } from '../data/bank'
 import { PageHeader, Panel, Tabs, Pill, Stat, CountUp, tooltipProps, axisTick, C, fmt } from '../components/ui'
+import SourceBadge from '../components/SourceBadge'
+import { useDebouncedPost, useLive } from '../lib/platform'
 
 export default function Governance() {
   const [tab, setTab] = useState('pii')
+  const [piiStatus, setPiiStatus] = useState({ status: 'demo' })
+  const finops = useLive('/governance/finops?days=30')
+  const badge = tab === 'pii' ? <SourceBadge status={piiStatus.status} error={piiStatus.error} liveLabel="Live · server-side masking" />
+    : <SourceBadge status={finops.status === 'live' && !finops.data.has_data ? 'demo' : finops.status} error={finops.error} />
   return (
     <div className="flex-1 overflow-y-auto p-10 animate-fade-in">
       <PageHeader eyebrow="Capability 4 · AI Governance & FinOps Control Plane" title="Responsible AI, with the receipts."
         desc="Employee data is detected and masked before any model sees it (UU PDP), every task is routed to the cheapest model that can do it well, and every token is accounted for."
-        image="/img/forest-aerial-2.jpg" pos="center 30%">
+        image="/img/forest-aerial-2.jpg" pos="center 30%" badge={badge}>
         <Tabs value={tab} onChange={setTab} tabs={[{ id: 'pii', label: 'PII masking' }, { id: 'finops', label: 'Routing & token FinOps' }]} />
       </PageHeader>
-      {tab === 'pii' ? <Pii /> : <FinOps />}
+      {tab === 'pii' ? <Pii onStatus={setPiiStatus} /> : finops.status === 'live' && finops.data.has_data ? <FinOpsLive d={finops.data} /> : <FinOps empty={finops.status === 'live'} />}
     </div>
   )
 }
@@ -22,12 +28,21 @@ export default function Governance() {
 const toneCls = { red: 'bg-esg-red/10 text-esg-red', amber: 'bg-esg-amber/10 text-esg-amber', blue: 'bg-accent-blue/10 text-accent-blue' }
 const hitColor = { NIK: '#ef4444', PERSON: '#fbbf24', PHONE: '#f97316', EMAIL: '#22d3ee', NPWP: '#7c5cfc' }
 
-function Pii() {
+function Pii({ onStatus }) {
   const [mode, setMode] = useState('tokenize')
   const [note, setNote] = useState(SAMPLE_NOTE)
   const [masked, setMasked] = useState(true)
   const [step, setStep] = useState(0)
-  const { out, hits } = useMemo(() => maskText(note, mode), [note, mode])
+  const local = useMemo(() => maskText(note, mode), [note, mode])
+  // Live: the same masking runs server-side (Lambda). The demo path above only exists so the page works offline.
+  const srvText = useDebouncedPost('/governance/pii-mask', { text: note, mode })
+  const srvRows = useDebouncedPost('/governance/pii-mask', { records: HR_ROWS.map(({ incident, ...r }) => ({ ...r, incident_detail: incident })), mode }, { delay: 50 })
+  const liveText = srvText.status === 'live'
+  const liveRows = srvRows.status === 'live'
+  useEffect(() => { onStatus({ status: srvText.status === 'error' || srvRows.status === 'error' ? 'error' : liveText && liveRows ? 'live' : srvText.status, error: srvText.error || srvRows.error }) }, [srvText.status, srvRows.status, srvText.error, srvRows.error])
+  const out = liveText ? srvText.data.masked : local.out
+  const hits = liveText ? Object.entries(srvText.data.findings).flatMap(([type, n]) => Array.from({ length: n }, () => ({ type: type.replace('field:', '').toUpperCase() }))) : local.hits
+  const serverRow = (i) => { const { incident_detail, ...r } = srvRows.data.masked[i]; return { ...r, incident: incident_detail } }
   const cols = ['id', 'nik', 'name', 'gender', 'dob', 'salary', 'incident', 'phone']
 
   useEffect(() => {
@@ -72,7 +87,7 @@ function Pii() {
             </thead>
             <tbody>
               {HR_ROWS.map((r) => {
-                const row = masked ? maskRow(r, mode) : { ...r, salary: 'IDR ' + fmt(r.salary) }
+                const row = masked ? (liveRows ? serverRow(HR_ROWS.indexOf(r)) : maskRow(r, mode)) : { ...r, salary: 'IDR ' + fmt(r.salary) }
                 return <tr key={r.id} className="border-t border-white/[0.05]">{cols.map((c) => <td key={c} className={`px-4 py-2 font-mono ${masked && ['nik', 'name', 'phone', 'salary', 'dob', 'incident'].includes(c) ? 'text-accent-teal' : !masked && ['nik', 'name', 'phone', 'salary'].includes(c) ? 'text-esg-red' : 'text-white/70'}`}>{row[c]}</td>)}</tr>
               })}
             </tbody>
@@ -108,7 +123,7 @@ function Pii() {
   )
 }
 
-function FinOps() {
+function FinOps({ empty }) {
   const [cache, setCache] = useState(true)
   const [batch, setBatch] = useState(true)
   const [live, setLive] = useState(true)
@@ -143,6 +158,7 @@ function FinOps() {
 
   return (
     <div className="space-y-5">
+      {empty && <div className="rounded-xl border border-esg-amber/25 bg-esg-amber/[0.06] px-4 py-3 text-xs text-esg-amber">No live usage recorded yet. Generate a report (or chat with the agent) and this page switches to measured data. Showing the simulation until then.</div>}
       <div className="grid grid-cols-4 gap-5">
         <Stat icon={Coins} label="Cost per monthly report run" value={cost.optimized} decimals={2} prefix="$" sub={`vs $${cost.baseline.toFixed(2)} on Sonnet only`} tone="teal" />
         <Stat icon={Zap} label="Savings" value={cost.savedPct} decimals={0} suffix="%" sub="Routing + caching + batch" tone="purple" />
@@ -211,6 +227,58 @@ function FinOps() {
         </table>
         <p className="text-[10px] text-white/30 px-6 py-3">List prices (USD per 1M tokens): Sonnet 4.5 $3 in / $15 out; Haiku 4.5 $1 in / $5 out. Caching assumes 60% of input is a static prefix read at 10% of price; batch assumes a 50% discount. Illustrative, verify before external use.</p>
       </Panel>
+    </div>
+  )
+}
+
+function FinOpsLive({ d }) {
+  const t = d.totals
+  const pct = t.all_sonnet_baseline_usd ? Math.round((t.saved_vs_baseline_usd / t.all_sonnet_baseline_usd) * 100) : 0
+  const proj = Object.entries(d.projection_by_profile_usd)
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-4 gap-5">
+        <Stat icon={Coins} label={`Spend, last ${d.days} days`} value={t.cost_usd} decimals={2} prefix="$" sub={`vs $${t.all_sonnet_baseline_usd.toFixed(2)} on Sonnet only`} tone="teal" />
+        <Stat icon={Zap} label="Saved by routing" value={pct} suffix="%" sub={`$${t.saved_vs_baseline_usd.toFixed(2)} below the all-Sonnet baseline`} tone="purple" />
+        <Stat icon={Cpu} label="Tokens processed" value={(t.tokens_in + t.tokens_out) / 1000} decimals={0} suffix="k" sub={`${fmt(t.calls)} model calls`} tone="blue" />
+        <Stat icon={Coins} label="Prompt-cache saving" value={t.prompt_cache_saved_usd} decimals={2} prefix="$" sub={`Active profile: ${d.profile}`} tone="amber" />
+      </div>
+      <div className="grid grid-cols-12 gap-5">
+        <Panel className="col-span-7" title="Daily spend" subtitle="USD per day, measured from every Bedrock call of the pipeline and the agent">
+          <div className="h-64"><ResponsiveContainer><BarChart data={d.daily}>
+            <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
+            <XAxis dataKey="day" tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => v.slice(5)} />
+            <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => '$' + v} />
+            <Tooltip {...tooltipProps} formatter={(v) => '$' + v} />
+            <Bar dataKey="cost_usd" name="Spend" fill={C.teal} radius={[4, 4, 0, 0]} />
+          </BarChart></ResponsiveContainer></div>
+        </Panel>
+        <Panel className="col-span-5" title="Cost by subsidiary" subtitle="Joined from execution metadata">
+          <div className="space-y-2.5">
+            {d.by_subsidiary.map((s) => (
+              <div key={s.key}><div className="flex justify-between text-xs mb-1"><span className="text-white/75">{s.key}</span><span className="text-white/50 tabular-nums">${s.cost_usd.toFixed(2)} · {s.calls} calls</span></div>
+                <div className="h-1.5 rounded-full bg-white/[0.06]"><div className="h-full rounded-full bg-accent-teal" style={{ width: (t.cost_usd ? (s.cost_usd / t.cost_usd) * 100 : 0) + '%' }} /></div></div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+      <div className="grid grid-cols-12 gap-5">
+        <Panel className="col-span-7" title="By task" subtitle="Where the tokens go" pad={false}>
+          <table className="w-full text-xs"><thead><tr className="text-white/40 text-left"><th className="px-6 py-2">Task</th><th className="text-right">Calls</th><th className="text-right">Tokens in / out</th><th className="text-right px-6">Cost</th></tr></thead>
+            <tbody>{d.by_task.map((r) => <tr key={r.key} className="border-t border-white/[0.05] row-hover"><td className="px-6 py-2.5 text-white/85">{r.key}</td><td className="text-right tabular-nums text-white/60">{r.calls}</td><td className="text-right tabular-nums text-white/60">{fmt(r.tokens_in)} / {fmt(r.tokens_out)}</td><td className="text-right px-6 tabular-nums text-white">${r.cost_usd.toFixed(3)}</td></tr>)}</tbody></table>
+        </Panel>
+        <Panel className="col-span-5" title="What if we changed the routing profile?" subtitle="The same tokens, re-priced under each profile">
+          <div className="space-y-2">
+            {proj.map(([k, v]) => (
+              <div key={k} className={`flex items-center justify-between rounded-xl px-4 py-2.5 border ${k === d.profile ? 'border-accent-teal/40 bg-accent-teal/[0.07]' : 'border-white/[0.07] bg-white/[0.025]'}`}>
+                <span className="text-sm text-white capitalize">{k}{k === d.profile && <span className="ml-2 text-[10px] text-accent-teal">active</span>}</span>
+                <span className="tabular-nums text-white/80">${v.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-white/30 mt-4">{d.pricing_note} Switch with the MODEL_ROUTING_PROFILE environment variable; quality is the default.</p>
+        </Panel>
+      </div>
     </div>
   )
 }
