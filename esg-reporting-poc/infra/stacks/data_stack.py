@@ -32,7 +32,12 @@ class EsgDataStack(Stack):
             physical_connection_requirements=glue.CfnConnection.PhysicalConnectionRequirementsProperty(
                 availability_zone=subnet.availability_zone, subnet_id=subnet.subnet_id, security_group_id_list=[glue_sg.security_group_id])))
         script = s3_assets.Asset(self, "ExtractScript", path=str(POC / "glue_jobs" / "esg_extract_rds.py"))
-        contracts = s3_assets.Asset(self, "ContractsModule", path=str(POC / "glue_jobs" / "esg_contracts.py"))
+        # A single-file asset is stored as <hash>.py, which Glue would import under that name. A folder asset is zipped
+        # (<hash>.zip with esg_contracts.py at its root), and --extra-py-files puts the zip on sys.path.
+        lib_dir = POC / "build" / "gluelib"
+        if not (lib_dir / "esg_contracts.py").exists():
+            raise RuntimeError("build/gluelib is missing. Run: python scripts/build_all.py")
+        contracts = s3_assets.Asset(self, "ContractsModule", path=str(lib_dir))
         role = iam.Role(self, "ExtractRole", assumed_by=iam.ServicePrincipal("glue.amazonaws.com"),
                         managed_policies=[iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AWSGlueServiceRole")])
         script.grant_read(role)

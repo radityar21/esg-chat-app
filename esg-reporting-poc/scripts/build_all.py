@@ -9,6 +9,7 @@ Creates under build/:
     layer/python/           recent boto3 (the platform Lambda needs the bedrock-agentcore client)
     pglayer/python/         pg8000 for the Lambdas inside the VPC
     agent.zip               AgentCore Runtime code package (Linux arm64)
+    gluelib/                esg_contracts.py for the Glue extract job (CDK zips this folder, so the module keeps its name)
 """
 import shutil
 import subprocess
@@ -38,9 +39,18 @@ def stage_lambdas() -> None:
     print(f"staged {len(PIPELINE)} Lambda packages")
 
 
+def stage_gluelib() -> None:
+    d = BUILD / "gluelib"
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True)
+    shutil.copy2(ROOT / "glue_jobs" / "esg_contracts.py", d / "esg_contracts.py")
+    print("staged Glue library")
+
+
 def main() -> None:
     BUILD.mkdir(exist_ok=True)
     stage_lambdas()
+    stage_gluelib()
     pip(BUILD / "docxlayer" / "python", "--platform", "manylinux2014_x86_64", "--implementation", "cp", "--python-version", "3.12",
         "--only-binary=:all:", "python-docx>=1.1.0")
     print("docx layer ready")
