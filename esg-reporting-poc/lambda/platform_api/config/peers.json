@@ -1,0 +1,12 @@
+{
+  "_note": "ILLUSTRATIVE peer scores for the demo. Peers are anonymised on purpose; replace with the bank's own benchmark study (e.g. from published sustainability reports) before any external use.",
+  "weights": {"E": 0.35, "S": 0.35, "G": 0.30},
+  "peers": [
+    {"id": "pa", "name": "Domestic Peer A", "E": 69, "S": 74, "G": 81, "intensity": 11.8, "green": 19.5},
+    {"id": "pb", "name": "Domestic Peer B", "E": 66, "S": 68, "G": 76, "intensity": 13.1, "green": 17.2},
+    {"id": "pc", "name": "Domestic Peer C", "E": 71, "S": 66, "G": 74, "intensity": 12.2, "green": 20.1},
+    {"id": "ra", "name": "Regional Peer A", "E": 82, "S": 79, "G": 88, "intensity": 7.9, "green": 29.4},
+    {"id": "rb", "name": "Regional Peer B", "E": 78, "S": 77, "G": 85, "intensity": 8.8, "green": 26.8}
+  ],
+  "own": {"E": 74, "S": 71, "G": 78}
+}

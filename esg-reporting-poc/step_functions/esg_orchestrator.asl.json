@@ -342,7 +342,7 @@
             "Resource": "arn:aws:states:::sns:publish",
             "Parameters": {
               "TopicArn": "arn:aws:sns:us-east-1:061039769766:ESG-HumanReview",
-              "Subject": "ESG Section Auto-Approved (Validation FAIL - Review Required)",
+              "Subject": "ESG Section included with validation errors - queued for AgentCore self-correction",
               "Message.$": "States.Format('ESG Section AUTO-APPROVED (requires post-hoc review)\n\nSection: {}\nRetry Count: {}\n\nValidation Details:\n{}\n\nThis section was included in the report despite validation failure. Please review the generated DOCX for accuracy.', $.section_result.section_id, $.validation_result.retry_count, States.JsonToString($.validation_result))"
             },
             "ResultPath": "$.sns_notification",
@@ -353,7 +353,9 @@
             "Type": "Pass",
             "Parameters": {
               "section_id.$": "$.section_result.section_id",
+              "template_id.$": "$.template_config.template_id",
               "section_result.$": "$.section_result",
+              "validation_result.$": "$.validation_result",
               "framework.$": "$.template_config.framework",
               "status": "INCLUDED"
             },
@@ -364,7 +366,9 @@
             "Type": "Pass",
             "Parameters": {
               "section_id.$": "$.section_result.section_id",
+              "template_id.$": "$.template_config.template_id",
               "section_result.$": "$.section_result",
+              "validation_result.$": "$.validation_result",
               "framework.$": "$.template_config.framework",
               "status": "INCLUDED_WITH_WARNINGS"
             },
@@ -462,6 +466,7 @@
             "Type": "Pass",
             "Parameters": {
               "section_id.$": "$.template_config.template_id",
+              "template_id.$": "$.template_config.template_id",
               "framework.$": "$.template_config.framework",
               "status": "ERROR",
               "error": "Section generation failed after all retries"
@@ -474,6 +479,7 @@
             "Comment": "Include section despite validation crash on retry — content was generated successfully",
             "Parameters": {
               "section_id.$": "$.section_result.section_id",
+              "template_id.$": "$.template_config.template_id",
               "section_result.$": "$.section_result",
               "framework.$": "$.template_config.framework",
               "status": "INCLUDED_WITH_WARNINGS"
@@ -542,7 +548,10 @@
     "Success": {
       "Type": "Pass",
       "Parameters": {
-        "assembly_result.$": "$.assembly_result"
+        "assembly_result.$": "$.assembly_result",
+        "generated_sections.$": "$.generated_sections",
+        "filtered_sections.$": "$.filtered_sections",
+        "athena_query_result.$": "$.athena_query_result"
       },
       "End": true
     },

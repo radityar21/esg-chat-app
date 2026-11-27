@@ -1,0 +1,41 @@
+{
+  "version": "2026-11-27",
+  "note": "Working checklist for PSPK 1 and 2 readiness. 'probe' decides how status is derived: athena_rows (data exists), pcaf_quality (threshold on weighted PCAF score), assurance (aggregated assurance_level), scenario_run (a scenario run is stored), attestation (manual evidence in S3, default_status is used until someone attests). Weights 1-3 reflect disclosure criticality. Verify against the final standard text before relying on it for filing.",
+  "pillars": [
+    {"id": "gov", "name": "Governance"},
+    {"id": "str", "name": "Strategy"},
+    {"id": "rsk", "name": "Risk Management"},
+    {"id": "met", "name": "Metrics & Targets"}
+  ],
+  "items": [
+    {"id": "G1", "pillar": "gov", "req": "Board oversight of climate-related risks and opportunities", "w": 3, "system": "Corporate Secretary", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "G2", "pillar": "gov", "req": "Management's role and competence on climate topics", "w": 2, "system": "HR System", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "G3", "pillar": "gov", "req": "Sustainability committee meetings with climate agenda", "w": 2, "system": "GRC Platform", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "G4", "pillar": "gov", "req": "Remuneration linked to ESG / climate KPIs", "w": 1, "system": "HR / Payroll", "rec": "Export Director KPI scorecards with ESG weighting from the HR performance module.", "probe": {"type": "attestation", "default_status": "partial"}},
+    {"id": "G5", "pillar": "gov", "req": "Independent assurance over the sustainability report", "w": 3, "system": "Internal Audit + external assurer", "rec": "Engage an assurer and collect the assurance scope letter and Internal Audit workpapers.", "probe": {"type": "assurance"}},
+    {"id": "S1", "pillar": "str", "req": "Climate risks and opportunities by time horizon", "w": 3, "system": "Risk Management", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "S2", "pillar": "str", "req": "Impact on business model and value chain", "w": 2, "system": "Strategy Office", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "S3", "pillar": "str", "req": "Transition plan and net-zero commitment", "w": 3, "system": "Strategy Office", "rec": "Collect the Board-approved decarbonisation roadmap and sector-level financed-emissions targets (2030 / 2050).", "probe": {"type": "attestation", "default_status": "gap"}},
+    {"id": "S4", "pillar": "str", "req": "Scenario analysis: 1.5°C, 2°C and higher", "w": 3, "system": "Risk Management", "rec": "Run the scenario engine and include the scenario section in the report (multi-framework report).", "probe": {"type": "scenario_run"}},
+    {"id": "S5", "pillar": "str", "req": "Financial effects on position, performance, cash flow", "w": 2, "system": "Finance / Core Banking", "rec": "Pull ECL by sector from Core Banking and map the scenario delta-ECL to the financial statements.", "probe": {"type": "attestation", "default_status": "gap"}},
+    {"id": "R1", "pillar": "rsk", "req": "Process to identify and assess climate risks", "w": 2, "system": "Risk Management", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "R2", "pillar": "rsk", "req": "Integration into enterprise risk management", "w": 3, "system": "Risk Management", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "R3", "pillar": "rsk", "req": "Physical risk exposure of collateral (geo-tagged)", "w": 3, "system": "Core Banking · Collateral Register", "rec": "The collateral register lacks coordinates for part of the property collateral. Request geocoding from Collateral Management.", "probe": {"type": "attestation", "default_status": "gap"}},
+    {"id": "R4", "pillar": "rsk", "req": "Transition risk heatmap by sector", "w": 2, "system": "Risk Management", "probe": {"type": "athena_rows", "sql": "SELECT COUNT(*) AS n FROM esg_aggregated.pcaf_by_sector WHERE reporting_year = {year}", "db": "esg_aggregated"}},
+    {"id": "R5", "pillar": "rsk", "req": "Sector exposure limits in Risk Appetite Statement", "w": 2, "system": "Risk Management", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "M1", "pillar": "met", "req": "Scope 1 GHG emissions", "w": 3, "system": "Energy API / Facilities", "probe": {"type": "athena_rows", "sql": "SELECT COUNT(*) AS n FROM esg_curated.ghg_scope1 WHERE reporting_year = {year}", "db": "esg_curated"}},
+    {"id": "M2", "pillar": "met", "req": "Scope 2 GHG emissions (location and market based)", "w": 3, "system": "Energy API / Utility", "probe": {"type": "athena_rows", "sql": "SELECT COUNT(*) AS n FROM esg_curated.ghg_scope2 WHERE reporting_year = {year}", "db": "esg_curated"}},
+    {"id": "M3", "pillar": "met", "req": "Scope 3 Category 15 financed emissions (PCAF)", "w": 3, "system": "Core Banking · Loan Book", "rec": "Several asset classes are at PCAF score 4-5. Request borrower energy data to reach score 2-3.", "probe": {"type": "pcaf_quality", "ready_max": 3.0, "partial_max": 4.0}},
+    {"id": "M4", "pillar": "met", "req": "GHG emissions intensity", "w": 2, "system": "Finance", "probe": {"type": "athena_rows", "sql": "SELECT COUNT(*) AS n FROM esg_aggregated.ghg_summary_annual WHERE reporting_year = {year} AND intensity_tco2e_per_idr_bn IS NOT NULL", "db": "esg_aggregated"}},
+    {"id": "M5", "pillar": "met", "req": "Climate targets and progress tracking", "w": 3, "system": "Sustainability Office", "probe": {"type": "attestation", "default_status": "ready"}},
+    {"id": "M6", "pillar": "met", "req": "Green finance ratio vs. sustainable finance action plan", "w": 2, "system": "Core Banking · Loan Book", "probe": {"type": "athena_rows", "sql": "SELECT COUNT(*) AS n FROM esg_raw.loan_portfolio WHERE reporting_year = {year}", "db": "esg_raw"}},
+    {"id": "M7", "pillar": "met", "req": "Internal carbon price", "w": 1, "system": "Risk / Treasury", "rec": "Document the shadow carbon price used in credit appraisal for high-emission sectors.", "probe": {"type": "attestation", "default_status": "partial"}}
+  ],
+  "sources": [
+    {"id": "ojk", "name": "OJK: Regulations & Consultations", "url": "https://www.ojk.go.id/id/regulasi/default.aspx"},
+    {"id": "dsak", "name": "DSAK IAI: Sustainability Standards", "url": "https://web.iaiglobal.or.id/"},
+    {"id": "ifrs", "name": "IFRS Foundation / ISSB", "url": "https://www.ifrs.org/news-and-events/news/"},
+    {"id": "efrag", "name": "EFRAG: ESRS", "url": "https://www.efrag.org/en/news-and-calendar/news"}
+  ],
+  "keywords": ["keberlanjutan", "sustainab", "climate", "iklim", "pspk", "issb", "ifrs s", "esrs", "csrd", "taksonomi", "taxonomy", "assurance", "jaminan", "emisi", "emission", "tkbi", "pcaf"]
+}

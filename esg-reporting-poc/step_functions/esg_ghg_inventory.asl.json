@@ -1,0 +1,104 @@
+{
+  "Comment": "ESG GHG Inventory pipeline: Glue ETL (Scope 1/2/3) -> aggregation -> inventory build (GHG Protocol Scope 3 template, Parts 1-6). Definition substitutions: ${PlatformFnArn}",
+  "StartAt": "RunEtl",
+  "States": {
+    "RunEtl": {
+      "Type": "Parallel",
+      "ResultPath": "$.etl",
+      "Next": "Aggregate",
+      "Branches": [
+        {
+          "StartAt": "Scope1",
+          "States": {
+            "Scope1": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "esg-etl-scope1-direct",
+                "Arguments": { "--REPORTING_YEAR.$": "States.Format('{}', $.reporting_year)" }
+              },
+              "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 1, "BackoffRate": 2.0 }],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Scope2",
+          "States": {
+            "Scope2": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "esg-etl-scope2-indirect",
+                "Arguments": { "--REPORTING_YEAR.$": "States.Format('{}', $.reporting_year)" }
+              },
+              "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 1, "BackoffRate": 2.0 }],
+              "End": true
+            }
+          }
+        },
+        {
+          "StartAt": "Scope3Pcaf",
+          "States": {
+            "Scope3Pcaf": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "esg-etl-scope3-pcaf",
+                "Arguments": { "--REPORTING_YEAR.$": "States.Format('{}', $.reporting_year)" }
+              },
+              "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 1, "BackoffRate": 2.0 }],
+              "End": true
+            }
+          }
+        }
+      ],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "Failed", "ResultPath": "$.error" }]
+    },
+
+    "Aggregate": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Parameters": {
+        "JobName": "esg-etl-aggregation",
+        "Arguments": { "--REPORTING_YEAR.$": "States.Format('{}', $.reporting_year)" }
+      },
+      "ResultPath": "$.aggregation",
+      "Retry": [{ "ErrorEquals": ["States.ALL"], "IntervalSeconds": 30, "MaxAttempts": 1, "BackoffRate": 2.0 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "Failed", "ResultPath": "$.error" }],
+      "Next": "BuildInventory"
+    },
+
+    "BuildInventory": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${PlatformFnArn}",
+        "Payload": {
+          "action": "ghg_inventory_build",
+          "year.$": "$.reporting_year",
+          "execution_id.$": "$$.Execution.Id"
+        }
+      },
+      "ResultSelector": { "inventory.$": "$.Payload" },
+      "ResultPath": "$.inventory_result",
+      "Retry": [{ "ErrorEquals": ["Lambda.ServiceException", "Lambda.TooManyRequestsException"], "IntervalSeconds": 5, "MaxAttempts": 2, "BackoffRate": 2.0 }],
+      "Catch": [{ "ErrorEquals": ["States.ALL"], "Next": "Failed", "ResultPath": "$.error" }],
+      "Next": "Done"
+    },
+
+    "Done": {
+      "Type": "Pass",
+      "Parameters": {
+        "inventory_result.$": "$.inventory_result"
+      },
+      "End": true
+    },
+
+    "Failed": {
+      "Type": "Fail",
+      "Error": "GhgInventoryError",
+      "Cause": "GHG inventory pipeline failed"
+    }
+  }
+}

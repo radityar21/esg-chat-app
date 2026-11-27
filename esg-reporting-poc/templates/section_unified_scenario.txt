@@ -1,0 +1,68 @@
+# VERSION: 1.0.0
+# LAST_MODIFIED: 2026-11-27
+# SECTION: SCENARIO_UNIFIED
+# MODE: MULTI_FRAMEWORK
+
+## SECTION TITLE (MANDATORY)
+title: "3.3 Climate Scenario Analysis & Resilience"
+
+## FRAMEWORKS ADDRESSED
+- IFRS S2 Paragraph 22 — Climate resilience and scenario analysis
+- ESRS E1 (SBM-3 / IRO-1) — Resilience of strategy to climate change; scenario analysis
+- OJK PSPK 2 — Analisis skenario iklim (1,5°C, 2°C dan skenario yang lebih tinggi)
+
+## DATA INPUT
+Use ONLY the `scenario_analysis` object in DATA INPUT. It contains three scenarios (1.5°C, 2°C, 3°C+). For each
+scenario the fields are:
+  - scenario, carbon_price_usd_per_t
+  - transition_delta_ecl_tn   (IDR trillion, additional expected credit loss from transition risk)
+  - physical_loss_tn          (IDR trillion, loss on property collateral from physical risk)
+  - green_opportunity_tn      (IDR trillion, incremental net interest income from green financing)
+  - net_impact_tn             (IDR trillion)
+  - downside_pct_of_loans     (percent of total loans)
+  - by_sector[]               (sector, exposure_tn, ebitda_hit_pct, delta_ecl_tn)
+Also available: `scenario_analysis.method`, `scenario_analysis.assumptions`, `scenario_analysis.horizon_years`.
+
+## CONDITIONAL DISCLOSURE LOGIC
+IF `scenario_analysis` is present:
+  → Generate the FULL disclosure below.
+IF it is missing or empty:
+  → State that scenario analysis has not yet been performed, state the framework requirement (IFRS S2 ¶22,
+    ESRS E1, PSPK 2: at least 1.5°C, 2°C and a higher-warming scenario), and give a roadmap. Do not invent numbers.
+
+## REQUIRED ELEMENTS
+
+### 1. Scope and approach (2 paragraphs)
+- The three scenarios, their carbon-price pathways, the time horizon, and what the model covers (transition risk on
+  the lending book, physical risk on property collateral, green-finance opportunity).
+- State that the model is a screening model and quote `scenario_analysis.method`.
+
+### 2. Results table (MANDATORY)
+| Scenario | Carbon price (USD/tCO2e) | Transition ΔECL (IDR tn) | Physical loss (IDR tn) | Green opportunity (IDR tn) | Net impact (IDR tn) |
+Use the values from DATA INPUT exactly as given. One row per scenario.
+
+### 3. Sector concentration (1 paragraph + table)
+- Name the three sectors with the largest `delta_ecl_tn` in the 1.5°C scenario, with their `delta_ecl_tn` values.
+
+### 4. Resilience conclusion (1 paragraph, forward_looking)
+- Qualitative conclusion about resilience of the strategy. Do NOT compare to risk appetite or claim adequacy unless a
+  statement to that effect is in DATA INPUT. Use the qualifier "subject to market conditions".
+
+### 5. Limitations and assumptions (methodology paragraph)
+- List the assumptions from `scenario_analysis.assumptions`. Say that parameters are illustrative screening values
+  and should be replaced by internal credit-risk models.
+
+### 6. Framework Cross-Reference Table (MANDATORY)
+| Framework | Disclosure Ref | Requirement | Status |
+|-----------|---------------|-------------|--------|
+| IFRS S2 | Para 22 | Climate resilience, scenario analysis | ✓ Covered |
+| ESRS E1 | SBM-3 / IRO-1 | Resilience of strategy | ✓ Covered |
+| OJK PSPK 2 | Analisis Skenario | 1.5°C, 2°C and higher scenario | ✓ Covered |
+
+### 7. Advisory Recommendations (MANDATORY)
+- Replace the screening parameters with internal PD/LGD models
+- Geocode the collateral register to measure physical risk bottom-up
+- Extend the horizon beyond five years and add a delayed-transition scenario
+
+## OUTPUT FORMAT
+Return JSON per the base prompt output contract. Include "framework_cross_reference" field.

@@ -46,8 +46,23 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+import os
+import time
+
 import boto3
 from botocore.config import Config as BotoConfig
+
+# Shared modules are packaged next to this file (see scripts/package_lambdas.sh).
+# If an older deployment package lacks them, fall back to the previous behaviour.
+try:
+    from model_routing import resolve as _resolve_model, task_for_section as _task_for_section
+    from pii_guard import mask_payload as _mask_payload
+    from usage_meter import record as _record_usage
+except ImportError:  # pragma: no cover
+    _resolve_model = None
+    _task_for_section = None
+    _mask_payload = None
+    _record_usage = None
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -95,6 +110,7 @@ TEMPLATE_MAP: dict[str, str] = {
     "social_unified": "templates/section_unified_social.txt",
     "governance_unified": "templates/section_unified_governance.txt",
     "targets_unified": "templates/section_unified_targets.txt",
+    "scenario_unified": "templates/section_unified_scenario.txt",
 }
 
 # REQ-KB-07: RAG queries per section (exact spec wording)
@@ -117,6 +133,7 @@ RAG_QUERIES: dict[str, str | None] = {
     "social_unified": "workforce employment training diversity human capital GRI ESRS OJK social",
     "governance_unified": "climate governance board oversight ESG committee remuneration IFRS ESRS OJK",
     "targets_unified": "climate targets net zero SBTi transition plan scenario IFRS ESRS OJK",
+    "scenario_unified": "climate scenario analysis 1.5 degrees 2 degrees physical transition risk resilience IFRS S2 ESRS E1 OJK PSPK",
 }
 
 # Benchmark RAG queries — pulls peer comparison data from benchmark KB docs
@@ -139,6 +156,7 @@ RAG_QUERIES_BENCHMARK: dict[str, str | None] = {
     "social_unified": "training hours gender diversity turnover benchmark Indonesian banking peer",
     "governance_unified": "ESG governance structure board committee benchmark banking BRI BCA DBS",
     "targets_unified": "net zero SBTi climate target benchmark banking NZBA transition",
+    "scenario_unified": "climate scenario analysis stress test benchmark banking Indonesia NGFS",
     "double_materiality": "climate risk assessment double materiality physical risk transition risk financial impact banking Indonesia",
 }
 
@@ -187,6 +205,7 @@ RAG_TOKEN_CAP: dict[str, int] = {
     "social_unified": 1200,
     "governance_unified": 1500,
     "targets_unified": 1500,
+    "scenario_unified": 1500,
     "double_materiality": 1500,
 }
 
@@ -208,6 +227,7 @@ BENCHMARK_TOKEN_CAP: dict[str, int] = {
     "social_unified": 2000,
     "governance_unified": 2000,
     "targets_unified": 2000,
+    "scenario_unified": 1500,
     "double_materiality": 2000,
 }
 
@@ -272,6 +292,8 @@ def _resolve_template_key(section_id: str) -> str:
         return "targets"
     if "materiality" in sid or "double_material" in sid:
         return "double_materiality"
+    if "scenario" in sid:
+        return "scenario_unified"
 
     raise ValueError(
         f"No template for section_id '{section_id}'. "
@@ -328,6 +350,14 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     metrics_json: dict = event["metrics_json"]
     kb_id: str | None = event.get("kb_id")
     execution_id: str = event.get("execution_id", "local-test")
+    correction: dict | None = event.get("correction")  # set by the AgentCore self-correction loop
+
+    # Defence in depth: nothing that looks like personal data may reach the model (UU PDP).
+    pii_report: dict = {}
+    if _mask_payload and os.environ.get("PII_MASKING", "on").lower() != "off":
+        metrics_json, pii_report = _mask_payload(metrics_json)
+        if pii_report:
+            logger.warning(f"PII guard masked fields before generation: {json.dumps(pii_report)}")
 
     # =========================================================================
     # STEP 1: Load prompts from S3
@@ -418,7 +448,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
 ## ADDITIONAL INSTRUCTIONS
 {_load_insight_instructions(template_key)}
-
+{_build_correction_block(correction)}
 Generate the section for reporting_year={reporting_year}, framework={framework}, section_id={section_id}.
 Return ONLY valid JSON per the output contract.
 """
@@ -437,7 +467,12 @@ Return ONLY valid JSON per the output contract.
     # =========================================================================
     # STEP 4: Invoke Bedrock
     # =========================================================================
-    logger.info(f"Invoking model: {MODEL_ID}")
+    model_id = MODEL_ID
+    routed_task = "section_complex"
+    if _resolve_model and _task_for_section:
+        routed_task = "corrector" if correction else _task_for_section(template_key)
+        _alias, model_id = _resolve_model(routed_task)
+    logger.info(f"Invoking model: {model_id} (task={routed_task}, correction={bool(correction)})")
 
     request_body: dict[str, Any] = {
         "anthropic_version": "bedrock-2023-05-31",
@@ -449,8 +484,9 @@ Return ONLY valid JSON per the output contract.
         ]
     }
 
+    _t0 = time.time()
     response = bedrock_client.invoke_model(
-        modelId=MODEL_ID,
+        modelId=model_id,
         contentType="application/json",
         accept="application/json",
         body=json.dumps(request_body)
@@ -460,6 +496,12 @@ Return ONLY valid JSON per the output contract.
     generated_text: str = response_body["content"][0]["text"]
     input_tokens: int = response_body["usage"]["input_tokens"]
     output_tokens: int = response_body["usage"]["output_tokens"]
+    if _record_usage:
+        try:
+            _record_usage(routed_task, model_id, input_tokens, output_tokens, execution_id=execution_id,
+                          section_id=section_id, source="section_gen", latency_ms=int((time.time() - _t0) * 1000))
+        except Exception as exc:  # metering must never break generation
+            logger.warning(f"usage metering failed: {exc}")
 
     # =========================================================================
     # STEP 5: Parse response as JSON
@@ -481,7 +523,10 @@ Return ONLY valid JSON per the output contract.
         "section_id": f"{framework}_{section_id.upper()}_{reporting_year}",
         "framework": framework,
         "reporting_year": reporting_year,
-        "model_id": MODEL_ID,
+        "model_id": model_id,
+        "routing_task": routed_task,
+        "correction_attempt": (correction or {}).get("attempt", 0),
+        "pii_masked_fields": pii_report,
         "prompt_version": "1.0.0",
         "generation_timestamp": datetime.now(timezone.utc).isoformat(),
         "data_input_hash": hashlib.sha256(json.dumps(metrics_json).encode()).hexdigest()[:16],
@@ -510,7 +555,7 @@ Return ONLY valid JSON per the output contract.
         return {
             "section_id": full_section_id,
             "content_json": content_json,
-            "model_id": MODEL_ID,
+            "model_id": model_id,
             "token_usage": {"input": input_tokens, "output": output_tokens},
             "rag_metadata": rag_metadata,
         }
@@ -519,7 +564,7 @@ Return ONLY valid JSON per the output contract.
         "section_id": full_section_id,
         "content_s3_key": s3_key,
         "content_s3_bucket": SECTION_OUTPUT_BUCKET,
-        "model_id": MODEL_ID,
+        "model_id": model_id,
         "token_usage": {"input": input_tokens, "output": output_tokens},
         "rag_metadata": rag_metadata,
     }
@@ -528,6 +573,30 @@ Return ONLY valid JSON per the output contract.
 # =============================================================================
 # KNOWLEDGE BASE RETRIEVAL (REQ-KB-06, REQ-KB-08, REQ-KB-09)
 # =============================================================================
+
+def _build_correction_block(correction: dict | None) -> str:
+    """Render the corrective instructions produced by the AgentCore validation loop.
+
+    The block lists the exact validation rules that the previous attempt violated, the concrete fix for each,
+    and (optionally) the offending snippets, so the model repairs the section instead of re-rolling it.
+    """
+    if not correction:
+        return ""
+    lines = [
+        "",
+        "## CORRECTION REQUIRED (attempt %s)" % correction.get("attempt", 1),
+        "A previous version of this section failed automated validation. Regenerate the COMPLETE section and fix every item below.",
+        "Do not remove accurate content; only change what is needed to satisfy the rules.",
+    ]
+    for item in correction.get("instructions", [])[:15]:
+        lines.append(f"- {item}")
+    offending = correction.get("offending_values") or []
+    if offending:
+        lines.append("- These numbers could not be traced to DATA INPUT and must be removed or replaced by values that exist in DATA INPUT: "
+                     + ", ".join(str(v) for v in offending[:12]))
+    lines.append("")
+    return "\n".join(lines)
+
 
 def _query_knowledge_base(
     kb_id: str,

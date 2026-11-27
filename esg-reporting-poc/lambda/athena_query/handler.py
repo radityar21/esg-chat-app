@@ -290,6 +290,17 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         "total_data_scanned_bytes": total_scanned,
     }
 
+    # Climate scenario analysis (PSPK 2 / IFRS S2 para 22): computed here so the numbers are part of DATA INPUT
+    # and therefore verifiable by the validation Lambda. Non-blocking: a failure must not stop the report.
+    try:
+        from scenario_engine import run_all, sectors_from_pcaf
+
+        sectors = sectors_from_pcaf(pcaf_sectors)
+        total_tn = sum(x["exposure_tn"] for x in sectors) or None
+        response["scenario_analysis"] = run_all(sectors, total_loans_tn=total_tn)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"scenario_analysis skipped: {exc}")
+
     logger.info(
         f"AthenaQueryFn complete: {len(pcaf_sectors)} sectors, "
         f"{total_scanned} bytes scanned"

@@ -115,7 +115,7 @@ SECTION_ORDER: dict[str, list[str]] = {
     "IFRS_S2": ["summary", "governance", "scope1", "scope2", "scope3_pcaf", "intensity", "targets", "social"],
     "CSRD_ESRS_E1": ["summary", "governance", "targets", "scope1", "scope2", "scope3_pcaf", "intensity", "reduction", "social", "double_materiality"],
     "OJK_PSPK": ["summary", "governance", "scope1", "scope2", "scope3_pcaf", "intensity", "reduction", "social"],
-    "MULTI_FRAMEWORK": ["summary", "scope1", "scope2", "scope3_pcaf", "intensity", "reduction", "governance", "targets", "social", "double_materiality"],
+    "MULTI_FRAMEWORK": ["summary", "scope1", "scope2", "scope3_pcaf", "intensity", "reduction", "governance", "targets", "scenario", "social", "double_materiality"],
 }
 
 PAGE_BREAK_BEFORE: set[str] = {"summary", "scope1", "scope2", "scope3_pcaf", "social", "governance"}
@@ -127,7 +127,7 @@ DOCUMENT_STRUCTURE_UNIFIED = [
     {"type": "heading1", "text": "Social Performance"},
     {"type": "section", "ids": ["social_unified"]},
     {"type": "heading1", "text": "Governance & Strategy"},
-    {"type": "section", "ids": ["governance_unified", "targets_unified"]},
+    {"type": "section", "ids": ["governance_unified", "targets_unified", "scenario_unified"]},
 ]
 
 LEGACY_DOCUMENT_STRUCTURE: dict[str, list[dict]] = {
@@ -2132,6 +2132,7 @@ def _sort_sections(sections: list[dict], order: list[str]) -> list[dict]:
 def _extract_section_type(section_id: str) -> str:
     """Extract section type from section_id."""
     sid = section_id.lower()
+    if "scenario" in sid: return "scenario"
     if "unified" in sid:
         if "scope1" in sid: return "scope1"
         if "scope2" in sid: return "scope2"

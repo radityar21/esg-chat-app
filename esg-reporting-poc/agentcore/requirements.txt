@@ -1,0 +1,6 @@
+# Versions verified on 2026-11-27 (bedrock-agentcore 1.28.x, strands-agents 1.67.x). Floors only; run
+# `pip freeze` after the first good build and pin if you need reproducible images.
+bedrock-agentcore>=1.28
+strands-agents>=1.67
+boto3>=1.40
+aws-opentelemetry-distro>=0.10

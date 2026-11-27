@@ -1,0 +1,17 @@
+category,activity,unit,quantity,ef_kgco2e_per_unit,emissions_tco2e,method,ef_source,data_quality_score,reporting_year
+c1,Purchased services and supplies,IDR million,6513439.89,2.4,15632.2557,spend-based,EEIO_ID_2022,4,2023
+c2,"Capital goods (IT hardware, fit-out)",IDR million,2741615.62,1.9,5209.0697,spend-based,EEIO_ID_2022,4,2023
+c3,"Upstream energy (WTT, T&D losses)",MWh,44702.87,85.0,3799.7443,average-data,DEFRA_2025,3,2023
+c4,Upstream transport of goods,tonne-km,4962499.09,0.12,595.4999,distance-based,DEFRA_2025,3,2023
+c5,Waste generated in operations,tonne,1958.56,220.0,430.8839,waste-type-specific,DEFRA_2025,3,2023
+c6,Business travel: air,passenger-km,15274114.96,0.15,2291.1172,distance-based,DEFRA_2025,2,2023
+c6,Business travel: hotel nights,room-night,39550.47,24.0,949.2112,average-data,DEFRA_2025,3,2023
+c7,Employee commuting,commute-day,5974017.97,1.5,8961.027,average-data,HR survey + DEFRA_2025,3,2023
+c1,Purchased services and supplies,IDR million,6271843.79,2.4,15052.4251,spend-based,EEIO_ID_2022,4,2024
+c2,"Capital goods (IT hardware, fit-out)",IDR million,2644183.8,1.9,5023.9492,spend-based,EEIO_ID_2022,4,2024
+c3,"Upstream energy (WTT, T&D losses)",MWh,40514.09,85.0,3443.6979,average-data,DEFRA_2025,3,2024
+c4,Upstream transport of goods,tonne-km,4770422.69,0.12,572.4507,distance-based,DEFRA_2025,3,2024
+c5,Waste generated in operations,tonne,1827.35,220.0,402.0175,waste-type-specific,DEFRA_2025,3,2024
+c6,Business travel: air,passenger-km,14331034.31,0.15,2149.6551,distance-based,DEFRA_2025,2,2024
+c6,Business travel: hotel nights,room-night,36969.84,24.0,887.2761,average-data,DEFRA_2025,3,2024
+c7,Employee commuting,commute-day,5481872.32,1.5,8222.8085,average-data,HR survey + DEFRA_2025,3,2024

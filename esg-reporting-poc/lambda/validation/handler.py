@@ -42,6 +42,7 @@ Deployment:
 from __future__ import annotations
 
 import json
+import os
 import re
 import logging
 from datetime import datetime, timezone
@@ -485,28 +486,69 @@ def _extract_table_values(section: dict) -> set[float]:
     return values
 
 
+def _add_variants(allowed: set[float], val: float) -> None:
+    """Add a number and the display variants the narrative may legitimately use."""
+    allowed.add(float(val))
+    allowed.add(abs(float(val)))
+    allowed.add(val * 1000)
+    allowed.add(val / 1000)
+    allowed.add(val * 100)
+    for nd in (1, 2, 3, 4, 6):
+        allowed.add(round(val, nd))
+
+
+def _walk_numbers(obj: Any, out: list[float], groups: list[list[float]]) -> None:
+    """Collect every numeric leaf (any depth) and the sibling numbers of each dict."""
+    if isinstance(obj, dict):
+        siblings = [float(v) for v in obj.values() if isinstance(v, (int, float)) and not isinstance(v, bool)]
+        if siblings:
+            groups.append(siblings)
+        for v in obj.values():
+            _walk_numbers(v, out, groups)
+    elif isinstance(obj, list):
+        # Column totals and row shares for lists of records (e.g. pcaf_sectors, scope1_facilities)
+        if obj and all(isinstance(r, dict) for r in obj):
+            keys = {k for r in obj for k, v in r.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+            for k in keys:
+                col = [float(r[k]) for r in obj if isinstance(r.get(k), (int, float))]
+                total = sum(col)
+                out.append(total)
+                if total:
+                    out.extend(round(v / total * 100, nd) for v in col for nd in (1, 2))
+        for v in obj:
+            _walk_numbers(v, out, groups)
+    elif isinstance(obj, (int, float)) and not isinstance(obj, bool):
+        out.append(float(obj))
+
+
 def _build_allowed_values(source_metrics: dict) -> set[float]:
     """Build set of allowed numeric values from source metrics (REQ-VAL-04).
 
-    Args:
-        source_metrics: DATA INPUT dict from Athena.
-
-    Returns:
-        Set of allowed float values (including derived variants).
+    Calibrated (docs/VALIDATION_FALSE_POSITIVES.md): walks nested structures, and also allows
+    component/total percentages the model may derive from sibling values. Set VALIDATOR_CALIBRATION=off
+    to restore the legacy top-level-only behaviour.
     """
     allowed: set[float] = set(WHITELISTED_VALUES)
-    for key, val in source_metrics.items():
-        if isinstance(val, (int, float)) and val is not None:
-            allowed.add(float(val))
-            allowed.add(abs(float(val)))
-            allowed.add(val * 1000)
-            allowed.add(val / 1000)
-            allowed.add(val * 100)
-            allowed.add(round(val, 1))
-            allowed.add(round(val, 2))
-            allowed.add(round(val, 3))
-            allowed.add(round(val, 4))
-            allowed.add(round(val, 6))
+    if os.environ.get("VALIDATOR_CALIBRATION", "on").lower() == "off":
+        for key, val in source_metrics.items():
+            if isinstance(val, (int, float)) and val is not None:
+                _add_variants(allowed, val)
+        return allowed
+
+    leaves: list[float] = []
+    groups: list[list[float]] = []
+    _walk_numbers(source_metrics, leaves, groups)
+    for v in leaves:
+        _add_variants(allowed, v)
+    for sib in groups:
+        if len(sib) > 40:
+            continue
+        for a in sib:
+            for b in sib:
+                if b and a != b and 0 <= a / b <= 1.0001:
+                    pct = a / b * 100
+                    allowed.add(round(pct, 1))
+                    allowed.add(round(pct, 2))
     return allowed
 
 
