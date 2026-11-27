@@ -58,7 +58,7 @@ def chat_submit(body: dict[str, Any], jobs: Any = None, invoke: Any = None) -> d
     job_id = uuid.uuid4().hex
     (jobs or _jobs()).put_item(Item={"job_id": job_id, "user": user, "status": "queued", "session_id": sid, "created_at": int(time.time()),
                                      "ttl": int(time.time()) + JOB_TTL_DAYS * 86400})
-    (invoke or _invoke_self)({"action": "agent_chat_worker", "job_id": job_id, "prompt": prompt, "session_id": sid})
+    (invoke or _invoke_self)({"action": "agent_chat_worker", "job_id": job_id, "prompt": prompt, "session_id": sid, "user": user})
     return {"job_id": job_id, "session_id": sid, "status": "queued"}
 
 
@@ -67,7 +67,7 @@ def chat_worker(event: dict[str, Any], jobs: Any = None, runtime: Any = None) ->
     job_id = event["job_id"]
     table.update_item(Key={"job_id": job_id}, UpdateExpression="SET #s = :s", ExpressionAttributeNames={"#s": "status"}, ExpressionAttributeValues={":s": "running"})
     try:
-        out = (runtime or _runtime)({"mode": "chat", "prompt": event["prompt"]}, event["session_id"])
+        out = (runtime or _runtime)({"mode": "chat", "prompt": event["prompt"], "user": event.get("user", "")}, event["session_id"])
         table.update_item(Key={"job_id": job_id}, UpdateExpression="SET #s = :s, #r = :r", ExpressionAttributeNames={"#s": "status", "#r": "result"},
                           ExpressionAttributeValues={":s": "done", ":r": json.dumps(out)[:300000]})
         return {"ok": True}
@@ -107,10 +107,44 @@ def runs(params: dict[str, Any]) -> dict[str, Any]:
         doc = common.s3_get(o["Key"]) or {}
         sections = doc.get("sections", {})
         out.append({"execution_id": doc.get("execution_id"), "status": doc.get("status"), "pipeline": doc.get("pipeline"),
-                    "updated_at": doc.get("updated_at"), "created_at": doc.get("created_at"),
+                    "updated_at": doc.get("updated_at"), "created_at": doc.get("created_at"), "parent_execution_id": doc.get("parent_execution_id"),
+                    "year": (doc.get("params") or {}).get("reporting_year"), "framework": (doc.get("params") or {}).get("framework"),
                     "sections": len(sections), "healed": sum(1 for s in sections.values() if (s or {}).get("status") == "healed"),
-                    "escalated": sum(1 for s in sections.values() if (s or {}).get("status") in ("source_data", "unresolved", "escalate_data"))})
+                    "escalated": sum(1 for s in sections.values() if (s or {}).get("status") in ("source_data", "unresolved", "escalate_data")),
+                    "summary": summarize(doc)})
     return {"runs": out}
+
+
+def summarize(doc: dict[str, Any]) -> str:
+    """One line per run, in the words of its pipeline (a data sync has no 'repaired sections')."""
+    pipeline, status, res = doc.get("pipeline"), doc.get("status"), doc.get("result") or {}
+    if status in ("pending", "running", None):
+        return "in progress"
+    if pipeline == "data_sync":
+        tables = res.get("tables") or {}
+        ok = sum(1 for t in tables.values() if t.get("status") == "ok")
+        parts = [f"{ok}/{len(tables)} tables loaded"]
+        if res.get("retried"):
+            parts.append(f"{len(res['retried'])} retried")
+        warns = sum(int(t.get("warnings") or 0) for t in tables.values())
+        if warns:
+            parts.append(f"{warns} warning(s)")
+        if res.get("etl_state"):
+            parts.append("ETL finished" if res["etl_state"] == "completed" else f"ETL {res['etl_state']}")
+        elif tables and ok < len(tables):
+            parts.append("ETL not started")
+        return " · ".join(parts)
+    if pipeline == "ghg_inventory":
+        return "inventory built" if status == "completed" else f"inventory {status}"
+    if pipeline == "esg_report":
+        healed, unresolved = len(res.get("healed") or []), len(res.get("unresolved") or [])
+        if status == "failed":
+            return "pipeline failed"
+        parts = [f"{healed} section(s) repaired" if healed else "all sections passed"]
+        if unresolved:
+            parts.append(f"{unresolved} need review")
+        return " · ".join(parts)
+    return status or ""
 
 
 def run_detail(execution_id: str) -> dict[str, Any]:

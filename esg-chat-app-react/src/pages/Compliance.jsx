@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts'
-import { CheckCircle2, CircleDot, XCircle, ScanSearch, FileDiff, Wrench, Globe2 } from 'lucide-react'
+import { CheckCircle2, CircleDot, XCircle, HelpCircle, ScanSearch, FileDiff, Wrench, Globe2 } from 'lucide-react'
 import { CHECKLIST, PILLARS, pillarScores, score, SOURCES, ALERTS_BASE, ALERT_NEW } from '../data/compliance'
 import { PageHeader, Panel, Gauge, Pill, Button, Tabs, C } from '../components/ui'
 import SourceBadge from '../components/SourceBadge'
@@ -11,6 +11,7 @@ const statusMeta = {
   ready: { icon: CheckCircle2, color: 'text-esg-green', label: 'Ready', tone: 'green' },
   partial: { icon: CircleDot, color: 'text-esg-amber', label: 'Partial', tone: 'amber' },
   gap: { icon: XCircle, color: 'text-esg-red', label: 'Gap', tone: 'red' },
+  unknown: { icon: HelpCircle, color: 'text-white/40', label: 'Not checked', tone: 'slate' },
 }
 const sev = { high: 'red', medium: 'amber', low: 'blue' }
 
@@ -25,7 +26,8 @@ export default function Compliance() {
   const base = score(CHECK)
   const now = score(CHECK, fixed)
   const ps = useMemo(() => pillarScores(fixed, CHECK), [fixed, CHECK])
-  const open = CHECK.filter((i) => i.status !== 'ready' && !fixed.has(i.id))
+  const open = CHECK.filter((i) => (i.status === 'partial' || i.status === 'gap') && !fixed.has(i.id))
+  const unknownCount = CHECK.filter((i) => i.status === 'unknown').length
   const list = CHECK.filter((i) => pillar === 'all' || i.pillar === pillar)
 
   const toggle = (id) => setFixed((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -74,9 +76,10 @@ export default function Compliance() {
           <div className="grid grid-cols-12 gap-5 mb-5">
             <Panel className="col-span-4" title="Compliance readiness score" subtitle="Weighted by disclosure criticality">
               <div className="flex flex-col items-center pt-2">
-                <Gauge value={Math.round(now)} label="Ready for PSPK" sublabel={fixed.size ? `+${(now - base).toFixed(1)} pts from simulated fixes` : 'Based on current curated data'} />
-                <div className="grid grid-cols-3 gap-2 w-full mt-4 text-center">
-                  {['ready', 'partial', 'gap'].map((s) => {
+                <Gauge value={Math.round(now ?? 0)} label={now == null ? 'Could not be checked' : 'Ready for PSPK'}
+                  sublabel={fixed.size && now != null && base != null ? `+${(now - base).toFixed(1)} pts from simulated fixes` : unknownCount ? `${unknownCount} item(s) could not be checked and are left out` : 'Based on current curated data'} />
+                <div className={`grid ${unknownCount ? 'grid-cols-4' : 'grid-cols-3'} gap-2 w-full mt-4 text-center`}>
+                  {['ready', 'partial', 'gap', ...(unknownCount ? ['unknown'] : [])].map((s) => {
                     const n = CHECK.filter((i) => (fixed.has(i.id) ? 'ready' : i.status) === s).length
                     return <div key={s} className="rounded-xl bg-white/[0.04] py-2"><div className={`text-xl font-display font-bold ${statusMeta[s].color}`}>{n}</div><div className="text-[10px] uppercase tracking-wider text-white/40">{statusMeta[s].label}</div></div>
                   })}
@@ -87,7 +90,7 @@ export default function Compliance() {
             <Panel className="col-span-4" title="Readiness by pillar" subtitle="Governance · Strategy · Risk · Metrics">
               <div className="h-[290px]">
                 <ResponsiveContainer>
-                  <RadarChart data={ps.map((p) => ({ pillar: p.name, score: Math.round(p.score), full: 100 }))} outerRadius="58%">
+                  <RadarChart data={ps.map((p) => ({ pillar: p.name, score: Math.round(p.score ?? 0), full: 100 }))} outerRadius="58%">
                     <PolarGrid stroke="rgba(255,255,255,0.1)" />
                     <PolarAngleAxis dataKey="pillar" tick={{ fill: 'rgba(255,255,255,0.65)', fontSize: 11 }} />
                     <Radar dataKey="score" stroke={C.teal} fill={C.teal} fillOpacity={0.3} strokeWidth={2} />
@@ -102,9 +105,9 @@ export default function Compliance() {
                   <button key={p.id} onClick={() => setPillar(pillar === p.id ? 'all' : p.id)} className="w-full text-left">
                     <div className="flex justify-between text-sm mb-1.5">
                       <span className={pillar === p.id ? 'text-white font-medium' : 'text-white/70'}>{p.name}</span>
-                      <span className="font-semibold text-white tabular-nums">{Math.round(p.score)}%</span>
+                      <span className="font-semibold text-white tabular-nums">{p.score == null ? '—' : `${Math.round(p.score)}%`}</span>
                     </div>
-                    <div className="h-2 rounded-full bg-white/[0.07] overflow-hidden"><div className="h-full rounded-full transition-all duration-700" style={{ width: p.score + '%', background: `linear-gradient(90deg, ${p.color}, ${p.color}aa)` }} /></div>
+                    <div className="h-2 rounded-full bg-white/[0.07] overflow-hidden"><div className="h-full rounded-full transition-all duration-700" style={{ width: (p.score ?? 0) + '%', background: `linear-gradient(90deg, ${p.color}, ${p.color}aa)` }} /></div>
                   </button>
                 ))}
               </div>
@@ -132,19 +135,20 @@ export default function Compliance() {
                         <span className="text-[10px] text-white/30">weight {i.w}</span>
                       </div>
                       {i.evidence && <div className="text-[11px] text-white/35 mt-1">Evidence: {i.evidence}</div>}
-                      {i.status !== 'ready' && (
+                      {(i.status === 'partial' || i.status === 'gap') && (
                         <div className="mt-1.5 text-xs text-white/55 leading-relaxed">
                           <span className="text-white/35">Source system:</span> <span className="text-accent-blue">{i.system}</span><br />
                           <span className="text-white/35">Recommendation:</span> {i.rec}
                         </div>
                       )}
                     </div>
-                    {i.status !== 'ready' && (
+                    {(i.status === 'partial' || i.status === 'gap') && (
                       <button onClick={() => toggle(i.id)} className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border transition ${fixed.has(i.id) ? 'bg-esg-green/15 border-esg-green/30 text-esg-green' : 'bg-white/[0.04] border-white/10 text-white/70 hover:bg-white/10'}`}>
                         <Wrench size={12} className="inline mr-1.5 -mt-0.5" />{fixed.has(i.id) ? 'Fixed (simulated)' : 'Simulate fix'}
                       </button>
                     )}
                     {i.status === 'ready' && <Pill tone="green">Ready</Pill>}
+                    {i.status === 'unknown' && <Pill tone="slate">Not checked</Pill>}
                   </div>
                 )
               })}

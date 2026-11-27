@@ -36,10 +36,12 @@ export const CHECKLIST = [
   { id: 'M7', pillar: 'met', req: 'Internal carbon price', status: 'partial', w: 1, system: 'Risk / Treasury', rec: 'Document the shadow carbon price used in credit appraisal for high-emission sectors.' },
 ]
 
+// Items with status "unknown" (the check itself failed) are left out of the score instead of counting as gaps.
 export const score = (items, fixed = new Set()) => {
+  const known = items.filter((i) => fixed.has(i.id) || i.status !== 'unknown')
   const cov = (i) => (fixed.has(i.id) ? 1 : i.status === 'ready' ? 1 : i.status === 'partial' ? 0.5 : 0)
-  const tot = items.reduce((a, i) => a + i.w, 0)
-  return (items.reduce((a, i) => a + i.w * cov(i), 0) / tot) * 100
+  const tot = known.reduce((a, i) => a + i.w, 0)
+  return tot ? (known.reduce((a, i) => a + i.w * cov(i), 0) / tot) * 100 : null
 }
 
 export const pillarScores = (fixed = new Set(), items = CHECKLIST) =>

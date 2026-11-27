@@ -17,6 +17,7 @@ export default function Home({ onNavigate }) {
   const finops = useLive('/governance/finops?days=14')
   const scenario = useDebouncedPost('/scenario', { year: 2024 }, { delay: 0 })
   const all = [ghg, ghgBase, readiness, portfolio, alerts, finops, scenario]
+  const firstError = all.map((x) => x.error).find(Boolean)
   const status = !platformEnabled ? 'demo' : all.some((x) => x.status === 'error') ? 'error' : all.some((x) => x.status === 'loading') ? 'loading' : 'live'
   const M = platformEnabled
     ? liveModel({ ghg: ghg.data, ghgBase: ghgBase.data, readiness: readiness.data, portfolio: portfolio.data, alerts: alerts.data, finops: finops.data, scenario: scenario.data })
@@ -41,7 +42,7 @@ export default function Home({ onNavigate }) {
           <div className="flex items-center gap-2 mb-5">
             {M.live && <Pill tone="green"><span className="w-1.5 h-1.5 rounded-full bg-esg-green animate-pulse" /> Live monitoring</Pill>}
             <Pill tone="slate">{M.name}{M.period ? ` · ${M.period}` : ''}</Pill>
-            <SourceBadge status={status} />
+            <SourceBadge status={status} error={firstError} />
           </div>
           <h1 className="font-display font-extrabold text-[52px] leading-[1.05] text-white tracking-tight">
             Know where you stand.<br />

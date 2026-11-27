@@ -200,10 +200,12 @@ def build_agent(service: ToolService, model_id: str | None = None) -> Any:
         from model_routing import resolve
 
         _, mid = resolve("agent_explainer")
-    return Agent(
+    agent = Agent(
         model=BedrockModel(model_id=mid, temperature=0.1),
         system_prompt=SYSTEM_PROMPT,
         tools=[plan_pipeline, list_capabilities, start_pipeline, get_run_status, explain_run, supervise_run, get_download_link,
                get_compliance_readiness, get_regulatory_alerts, get_ghg_inventory, run_climate_scenarios, get_ai_cost_summary,
                sync_data_from_database, inspect_source_database, get_etl_report],
     )
+    agent.esg_model_id = mid  # read by app.py to meter each turn
+    return agent

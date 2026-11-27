@@ -7,7 +7,7 @@ HTTP routes (API Gateway HTTP API, payload v2, Cognito JWT authorizer on every r
     GET  /portfolio?year=                    POST /scenario                     POST /governance/pii-mask
     GET  /governance/finops?days=            POST /agent/chat                   GET  /agent/chat/{job_id}
     GET  /agent/runs                         GET  /agent/runs/{id}              GET  /health
-    GET  /reports/history?limit=             GET  /reference/documents
+    GET  /reports/history?limit=             GET  /reference/documents          GET  /agent/runs/{id}/progress
 Roles come from the ``cognito:groups`` claim: ``admin`` and ``viewer``. A user in neither group is rejected.
 Direct invocations are protected by IAM only.
 """
@@ -19,7 +19,7 @@ import json
 import logging
 from typing import Any, Callable
 
-from platform_api import agent_api, common, compliance, ghg, governance, portfolio, reports
+from platform_api import agent_api, common, compliance, ghg, governance, portfolio, progress, reports
 
 log = logging.getLogger()
 log.setLevel(logging.INFO)
@@ -91,6 +91,8 @@ def _http(event: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError("body must be a JSON object")
             params.update(parsed)
         params = {k: v for k, v in params.items() if not str(k).startswith("_")}  # never trust client-supplied internal fields
+        if method == "GET" and path.startswith("/agent/runs/") and path.endswith("/progress"):
+            return common.response(200, progress.progress(path.split("/")[3]))
         if method == "GET" and path.startswith("/agent/runs/"):
             return common.response(200, agent_api.run_detail(path.rsplit("/", 1)[1]))
         if method == "GET" and path.startswith("/agent/chat/"):

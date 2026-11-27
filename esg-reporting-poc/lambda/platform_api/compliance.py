@@ -18,7 +18,9 @@ ATTEST_KEY = "compliance/attestations.json"
 ALERTS_KEY = "compliance/alerts.json"
 SEEN_KEY = "compliance/seen.json"
 SCENARIO_RUN_KEY = "platform/scenario_last_run.json"
-VALID_STATUS = {"ready", "partial", "gap"}
+VALID_STATUS = {"ready", "partial", "gap"}  # statuses an admin can attest
+# "unknown": the probe could not run (technical error). It is shown, but excluded from the score so a broken query can
+# never look like a compliance gap.
 COVERAGE = {"ready": 1.0, "partial": 0.5, "gap": 0.0}
 
 Q = common.athena
@@ -32,6 +34,8 @@ def _probe(item: dict[str, Any], year: int, att: dict[str, Any], summary: dict[s
         if t == "athena_rows":
             n = (q(p["sql"].format(year=year), p["db"]) or [{}])[0].get("n") or 0
             return ("ready", f"{n:,} rows for {year}") if n > 0 else ("gap", f"no rows for {year}")
+        if t in ("pcaf_quality", "assurance") and summary is None:
+            raise RuntimeError("the GHG summary could not be read")
         if t == "pcaf_quality":
             s = summary.get("avg_pcaf_data_quality")
             if s is None:
@@ -46,7 +50,7 @@ def _probe(item: dict[str, Any], year: int, att: dict[str, Any], summary: dict[s
                 return "ready", "scenario analysis run in the last 90 days"
             return "partial", "scenario engine available, no recent run stored"
     except Exception as exc:  # noqa: BLE001 - a failing probe must degrade the item, not the endpoint
-        return "gap", f"probe error: {str(exc)[:120]}"
+        return "unknown", f"could not check: {str(exc)[:160]}"
     # attestation
     a = (att or {}).get(item["id"])
     if a and a.get("status") in VALID_STATUS:
@@ -54,26 +58,29 @@ def _probe(item: dict[str, Any], year: int, att: dict[str, Any], summary: dict[s
     return p.get("default_status", "gap"), "no evidence on file (default)"
 
 
-def score(items: list[dict[str, Any]]) -> float:
-    tot = sum(i["w"] for i in items)
-    return round(sum(i["w"] * COVERAGE[i["status"]] for i in items) / tot * 100, 1) if tot else 0.0
+def score(items: list[dict[str, Any]]) -> float | None:
+    known = [i for i in items if i["status"] in COVERAGE]
+    tot = sum(i["w"] for i in known)
+    return round(sum(i["w"] * COVERAGE[i["status"]] for i in known) / tot * 100, 1) if tot else None
 
 
 def readiness(year: int, q: Callable[..., Any] | None = None) -> dict[str, Any]:
     q = q or Q
     att = common.s3_get(ATTEST_KEY) or {}
+    summary_error = None
     try:
         summary = (q(f"SELECT avg_pcaf_data_quality, assurance_level FROM esg_aggregated.ghg_summary_annual WHERE reporting_year = {year} LIMIT 1", "esg_aggregated") or [{}])[0]
-    except Exception:  # noqa: BLE001
-        summary = {}
+    except Exception as exc:  # noqa: BLE001
+        summary, summary_error = None, str(exc)[:200]  # probes that need it report "unknown"
     items = []
     for it in CONFIG["items"]:
         status, evidence = _probe(it, year, att, summary, q)
         items.append({k: it[k] for k in ("id", "pillar", "req", "w", "system")} | {"status": status, "evidence": evidence,
-                                                                                  "rec": it.get("rec", "") if status != "ready" else ""})
+                                                                                  "rec": it.get("rec", "") if status in ("partial", "gap") else ""})
     pillars = [{**p, "score": score([i for i in items if i["pillar"] == p["id"]])} for p in CONFIG["pillars"]]
     return {"source": "athena", "year": year, "score": score(items), "pillars": pillars, "items": items,
-            "counts": {s: sum(1 for i in items if i["status"] == s) for s in ("ready", "partial", "gap")}, "checklist_version": CONFIG["version"]}
+            "counts": {s: sum(1 for i in items if i["status"] == s) for s in ("ready", "partial", "gap", "unknown")}, "checklist_version": CONFIG["version"],
+            "summary_error": summary_error}
 
 
 def attest(body: dict[str, Any]) -> dict[str, Any]:

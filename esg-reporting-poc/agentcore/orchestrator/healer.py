@@ -51,18 +51,20 @@ class SelfHealingSupervisor(DataSyncMixin):
 
     # ── start ──────────────────────────────────────────────────────────────────────────────────
     def start(self, pipeline: str, params: dict[str, Any], *, subsidiary: str = "bank", requested_by: str = "agent",
-              auto_heal: bool = True) -> dict[str, Any]:
+              auto_heal: bool = True, parent: str | None = None) -> dict[str, Any]:
         sfn_input = build_input(pipeline, params, self.s)
         arn = self.aws.sfn_start(state_machine_for(pipeline, self.s), sfn_input)
         eid = short_id(arn)
         doc = self.ledger.load(arn)
         doc.update({"pipeline": pipeline, "status": "running", "params": {k: v for k, v in sfn_input.items() if k != "section_templates"},
-                    "execution_arn": arn, "auto_heal": auto_heal, "subsidiary": subsidiary})
+                    "execution_arn": arn, "auto_heal": auto_heal, "subsidiary": subsidiary,
+                    "parent_execution_id": short_id(parent) if parent else None})
         self.ledger.event(arn, doc, "pipeline_started", f"Started the {pipeline} pipeline for {sfn_input['reporting_year']}.",
                           pipeline=pipeline, framework=sfn_input.get("framework"))
         self.ledger.write_meta(arn, {"pipeline": pipeline, "subsidiary": subsidiary, "requested_by": requested_by, "execution_arn": arn,
                                      "state_machine_arn": state_machine_for(pipeline, self.s),
-                                     "started_at": iso(self.aws.now()), "params": doc["params"], "auto_heal": auto_heal})
+                                     "started_at": iso(self.aws.now()), "params": doc["params"], "auto_heal": auto_heal,
+                                     "parent_execution_id": short_id(parent) if parent else None})
         return {"execution_id": eid, "execution_arn": arn, "pipeline": pipeline, "auto_heal": auto_heal}
 
     # ── status ─────────────────────────────────────────────────────────────────────────────────
@@ -348,13 +350,13 @@ class SelfHealingSupervisor(DataSyncMixin):
             if st == "healed":
                 last = (s.get("strategies") or [{}])[-1]
                 how = STRATEGIES.get(last.get("strategy", ""), {}).get("label", "automatic correction")
-                notes.append({"section": tid, "level": "info", "text": f"Repaired automatically after {s.get('attempts', 0)} attempt(s): {how}. The text was regenerated and passed validation."
+                notes.append({"section": tid, "level": "info", "label": "Repaired" if s.get("attempts") else "Accepted", "text": f"Repaired automatically after {s.get('attempts', 0)} attempt(s): {how}. The text was regenerated and passed validation."
                               if s.get("attempts") else "Re-validated and accepted."})
             elif st in ("escalate_data", "source_data"):
-                notes.append({"section": tid, "level": "action", "text": "The source data is inconsistent, so the text cannot be fixed by rewriting. "
+                notes.append({"section": tid, "level": "action", "label": "Source data problem", "text": "The source data is inconsistent, so the text cannot be fixed by rewriting. "
                               + " ".join(s.get("explanations", [])[:2]) + " Fix the ETL output and re-run the pipeline."})
             elif st == "unresolved":
-                notes.append({"section": tid, "level": "review", "text": f"Included with warnings. Tried: {', '.join(tried) or 'no regeneration'}. "
+                notes.append({"section": tid, "level": "review", "label": "Needs review", "text": f"Included with warnings. Tried: {', '.join(tried) or 'no regeneration'}. "
                               f"Stopped because {s.get('stop_reason', 'no further strategy applied')}. " + " ".join(s.get("explanations", [])[:2]) + " Please review before publishing."})
         return notes
 

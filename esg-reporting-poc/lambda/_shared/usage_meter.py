@@ -41,7 +41,7 @@ def _get_table():
 
 
 def record(task: str, model_id: str, tokens_in: int, tokens_out: int, *, execution_id: str = "",
-           section_id: str = "", source: str = "pipeline", cached_in: int = 0, latency_ms: int = 0) -> dict[str, Any]:
+           section_id: str = "", source: str = "pipeline", cached_in: int = 0, latency_ms: int = 0, user: str = "") -> dict[str, Any]:
     alias = alias_for_model_id(model_id)
     item = {
         "day": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -58,6 +58,7 @@ def record(task: str, model_id: str, tokens_in: int, tokens_out: int, *, executi
         "section_id": section_id,
         "source": source,
         "latency_ms": int(latency_ms),
+        "user": user,
         "ttl": int(time.time()) + int(os.environ.get("USAGE_TTL_DAYS", "14")) * 86400,  # DynamoDB TTL attribute
     }
     table = _get_table()

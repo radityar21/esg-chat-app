@@ -131,7 +131,7 @@ class EsgPlatformStack(Stack):
                                          exclude=["/*", "!/_shared", "!/platform_api", "__pycache__", "*.pyc"]),
             timeout=Duration.seconds(300), memory_size=512, environment=env, layers=layers, log_retention=two_weeks, tracing=_lambda.Tracing.ACTIVE,
             description="ESG platform API: compliance, GHG inventory, portfolio, scenarios, governance, FinOps")
-        usage.grant_read_data(platform_fn)
+        usage.grant_read_write_data(platform_fn)  # read for FinOps, write for the regulatory classifier's own metering
         jobs.grant_read_write_data(platform_fn)
         pii_secret.grant_read(platform_fn)
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["lambda:InvokeFunction"], resources=[platform_fn_arn]))  # asynchronous self-invocation (chat turns, scans)
@@ -142,8 +142,13 @@ class EsgPlatformStack(Stack):
                                                                       f"arn:aws:glue:{region}:{acct}:table/esg_*/*"]))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["s3:GetObject", "s3:ListBucket", "s3:GetBucketLocation"], resources=bucket_arns + bucket_objs))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["s3:PutObject", "s3:AbortMultipartUpload"], resources=[f"arn:aws:s3:::{output_bucket}/*"]))
-        platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["states:ListExecutions", "states:DescribeExecution"],
-                                                           resources=[report_sm_arn, f"arn:aws:states:{region}:{acct}:execution:{REPORT_SM_NAME}:*"]))
+        # Athena writes query results with the CALLER's permissions into the workgroup's result bucket
+        athena_results = f"arn:aws:s3:::esg-athena-results-{acct}"
+        platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:GetBucketLocation", "s3:AbortMultipartUpload"],
+                                                           resources=[athena_results, athena_results + "/*"]))
+        platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["states:ListExecutions"], resources=[report_sm_arn]))
+        platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["states:DescribeExecution", "states:GetExecutionHistory"],  # history and run checkpoints
+                                                           resources=[f"arn:aws:states:{region}:{acct}:execution:{n}:*" for n in (REPORT_SM_NAME, GHG_SM_NAME, "ESGDataSyncStateMachine")]))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["bedrock:InvokeModel"], resources=model_arns))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["bedrock:ApplyGuardrail"], resources=[guardrail.attr_guardrail_arn]))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["bedrock-agentcore:InvokeAgentRuntime"], resources=[f"arn:aws:bedrock-agentcore:{region}:{acct}:runtime/*"]))

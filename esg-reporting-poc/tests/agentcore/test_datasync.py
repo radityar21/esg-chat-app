@@ -152,3 +152,17 @@ def test_invalid_table_names_are_rejected_before_starting():
     aws, sup = make()
     with pytest.raises(ValueError):
         sup.start("data_sync", {"reporting_year": 2024, "tables": ["users; drop"]})
+
+
+def test_sync_notes_are_labelled_loaded_not_repaired_and_child_links_parent():
+    def on_start(aws, arn, sm, payload):
+        if sm == GHG_SM:
+            aws.finish(arn, "SUCCEEDED", {})
+    aws, sup = make({t: report() for t in SYNC_TABLES}, on_start)
+    arn = run_sync(sup, aws, [ok(t) for t in SYNC_TABLES])
+    res = sup.supervise(arn)
+    notes = {n["section"]: n for n in res["result"]["notes"]}
+    assert all(notes[t]["level"] == "ok" and notes[t]["label"] == "Loaded" for t in SYNC_TABLES)
+    assert notes["etl"]["label"] == "ETL finished"
+    child = res["result"]["etl_execution_id"]
+    assert sup.ledger.load(child)["parent_execution_id"] == arn.split(":")[-1]

@@ -88,14 +88,15 @@ class DataSyncMixin:
                 warns = [v for v in (report or {}).get("violations", []) if v.get("level") == "warning"]
                 tables[table] = {"status": "ok", "rows": (report or {}).get("rows"), "warnings": len(warns)}
                 if warns:
-                    notes.append({"section": table, "level": "review", "text": f"Loaded {(report or {}).get('rows', '?')} rows with {len(warns)} warning(s): "
+                    notes.append({"section": table, "level": "review", "label": "Loaded with warnings", "text": f"Loaded {(report or {}).get('rows', '?')} rows with {len(warns)} warning(s): "
                                   + " ".join(v["detail"] for v in warns[:3]) + " The data was loaded; ask the data owner to confirm."})
                 else:
-                    notes.append({"section": table, "level": "info", "text": f"Loaded {(report or {}).get('rows', '?')} rows. The data contract was met."})
+                    notes.append({"section": table, "level": "ok", "label": "Loaded", "text": f"Loaded {(report or {}).get('rows', '?')} rows. The data contract was met."
+                                  + (" Loaded on the automatic retry." if table in retried else "")})
             else:
                 t = triage(r.get("error"), r.get("cause"), report)
                 tables[table] = {"status": "failed", "kind": t["kind"], "retried": table in retried}
-                notes.append({"section": table, "level": "action", "text": f"{t['explanation']} {t['suggestion']}"
+                notes.append({"section": table, "level": "action", "label": "Not loaded", "text": f"{t['explanation']} {t['suggestion']}"
                               + (" It was retried once." if table in retried else "")})
                 self.ledger.event(arn, doc, "sync_table_failed", f"{table}: {t['kind']} problem. {t['explanation']}", table=table, kind=t["kind"])
 
@@ -104,21 +105,22 @@ class DataSyncMixin:
         if failed:
             doc["status"] = "escalated"
             self.ledger.event(arn, doc, "escalated", f"Sync finished with problems in: {', '.join(failed)}. The raw zone still holds the last good data; the downstream ETL was not started.")
-            notes.append({"section": "pipeline", "level": "action", "text": "The downstream ETL was not started because not every table loaded. Fix the tables above and sync again."})
+            notes.append({"section": "pipeline", "level": "action", "label": "ETL not started", "text": "The downstream ETL was not started because not every table loaded. Fix the tables above and sync again."})
         else:
             doc["status"] = "completed"
             self.ledger.event(arn, doc, "sync_loaded", f"All {len(tables)} tables loaded.")
             if inp.get("run_etl", True):
-                started = self.start("ghg_inventory", {"reporting_year": year}, subsidiary=doc.get("subsidiary", "bank"), requested_by="data_sync")
+                started = self.start("ghg_inventory", {"reporting_year": year}, subsidiary=doc.get("subsidiary", "bank"), requested_by="data_sync", parent=arn)
                 result["etl_execution_id"] = started["execution_id"]
                 self.ledger.event(arn, doc, "etl_started", "Started the downstream ETL (Scope 1/2/3 Glue jobs and aggregation) because every table loaded.", etl_execution_id=started["execution_id"])
                 etl = self.supervise(started["execution_arn"])
                 result["etl_state"] = etl.get("state")
                 if etl.get("state") != "completed":
                     doc["status"] = "escalated"
-                    notes.append({"section": "etl", "level": "action", "text": "The tables loaded, but the downstream ETL did not finish cleanly. Open its run for the explanation."})
+                    notes.append({"section": "etl", "level": "action", "label": "ETL problem", "text": "The tables loaded, but the downstream ETL did not finish cleanly. Open its run for the explanation."})
                     self.ledger.event(arn, doc, "escalated", f"The downstream ETL ended as '{etl.get('state')}'.")
                 else:
+                    notes.append({"section": "etl", "level": "ok", "label": "ETL finished", "text": "Scope 1, 2 and 3 calculations and the aggregation finished; curated and aggregated data are up to date."})
                     self.ledger.event(arn, doc, "etl_finished", "The downstream ETL finished: curated and aggregated zones are up to date.")
         doc["sections"] = {t: {"status": "ok" if v["status"] == "ok" else "unresolved", "explanations": []} for t, v in tables.items()}
         doc["result"] = result

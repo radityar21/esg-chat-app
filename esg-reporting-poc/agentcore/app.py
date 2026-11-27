@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from orchestrator import config  # noqa: E402
 from orchestrator.aws import RealAws  # noqa: E402
 from orchestrator.service import BackgroundRunner, ToolService  # noqa: E402
 from pii_guard import mask_text  # noqa: E402
+from usage_meter import record as record_usage  # noqa: E402
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 log = logging.getLogger("esg-orchestrator")
@@ -45,6 +47,17 @@ def _agent_for(session_id: str) -> Any:
 
         _agents[session_id] = build_agent(service)
     return _agents[session_id]
+
+
+def _meter(agent: Any, result: Any, user: str, latency_ms: int) -> None:
+    """Record the tokens of this turn (all model calls the agent made for it) in the FinOps usage table."""
+    try:
+        inv = result.metrics.latest_agent_invocation
+        usage = inv.usage if inv else result.metrics.accumulated_usage
+        record_usage("agent_chat", getattr(agent, "esg_model_id", ""), int(usage.get("inputTokens", 0)), int(usage.get("outputTokens", 0)),
+                     cached_in=int(usage.get("cacheReadInputTokens", 0) or 0), source="agent", latency_ms=latency_ms, user=user)
+    except Exception as exc:  # noqa: BLE001 - metering must never break a chat turn
+        log.warning("usage metering failed: %s", exc)
 
 
 @app.ping
@@ -75,7 +88,9 @@ def invoke(payload: dict[str, Any], context: Any = None) -> dict[str, Any]:
         log.warning("masked %d personal-data item(s) in a user message", len(findings))
         masked += "\n\n(Personal data in this message was replaced by tokens before processing.)"
     agent = _agent_for(session_id)
+    t0 = time.time()
     result = agent(masked)
+    _meter(agent, result, str(payload.get("user") or ""), int((time.time() - t0) * 1000))
     text = result.message["content"][0]["text"] if getattr(result, "message", None) else str(result)
     return {"response": text, "session_id": session_id, "pii_masked": len(findings)}
 
