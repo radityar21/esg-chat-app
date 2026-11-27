@@ -39,7 +39,7 @@ or `generate` (section missing). Source-data rules (VAL-NUM-02, VAL-NUM-06) are 
 | `minimal_safe` | Sonnet | Short text, figures only in tables. Always the last resort |
 
 Order = expected success per dollar. The expected success starts from a prior and is updated by **memory**: every attempt
-records success or failure per `failure type#strategy` in the DynamoDB table `esg-agent-memory` (atomic counters).
+records success or failure per `failure type#strategy` in a DynamoDB table (stack output `AgentMemoryTableName`) (atomic counters).
 A strategy that keeps failing for a failure type moves down; one that keeps working moves up. This is what makes the
 multi-model routing adaptive: cheap models are tried first only while they work.
 

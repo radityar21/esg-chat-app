@@ -82,7 +82,7 @@ Scope 1/2/3 ETL), repeat for 2023, then "Generate a GRI 305 report for 2024".
 - Users: no self-sign-up, password 12+ characters, optional MFA. Roles from the `admin` / `viewer` groups; unknown users get 403.
 - Secrets: `esg/pii-token-secret` (created by the foundation stack, do not rotate casually), `esg/rds/master`, `esg/rds/reader`.
 - Retention: logs 14 days; usage, chat-job tables 14 days (TTL); operational S3 prefixes (agent-ledger, executions, platform-cache, etl-reports) and Athena results 14 days. Generated reports, source data and compliance attestations are kept.
-- Adaptive repair budgets are runtime variables (`SECTION_BUDGET_USD`, `RUN_BUDGET_USD`, `MAX_CORRECTION_ATTEMPTS`). Learned strategy statistics (`esg-agent-memory`) are kept.
+- Adaptive repair budgets are runtime variables (`SECTION_BUDGET_USD`, `RUN_BUDGET_USD`, `MAX_CORRECTION_ATTEMPTS`). Learned strategy statistics (table in output `AgentMemoryTableName`) are kept.
 - Buckets, the database and the Cognito pool are retained when a stack is deleted.
 
 ## Not verified in the build environment

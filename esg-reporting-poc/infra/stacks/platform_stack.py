@@ -106,7 +106,7 @@ class EsgPlatformStack(Stack):
                           sort_key=ddb.Attribute(name="sk", type=ddb.AttributeType.STRING), billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
                           removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")  # 14-day usage history by design
         # Learned success rates of correction strategies. Tiny, and valuable over time, so it is kept (no TTL).
-        memory = ddb.Table(self, "AgentMemoryTable", table_name="esg-agent-memory", partition_key=ddb.Attribute(name="key", type=ddb.AttributeType.STRING),
+        memory = ddb.Table(self, "AgentMemoryTable", partition_key=ddb.Attribute(name="key", type=ddb.AttributeType.STRING),
                            billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.RETAIN, point_in_time_recovery=True)
         jobs = ddb.Table(self, "ChatJobsTable", table_name="esg-chat-jobs", partition_key=ddb.Attribute(name="job_id", type=ddb.AttributeType.STRING),
                          billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")
@@ -190,6 +190,8 @@ class EsgPlatformStack(Stack):
                 entry_point=["opentelemetry-instrument", "app.py"], runtime="PYTHON_3_12"))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams", "logs:DescribeLogGroups"],
                                                   resources=[f"arn:aws:logs:{region}:{acct}:log-group:/aws/bedrock-agentcore/runtimes/*", f"arn:aws:logs:{region}:{acct}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*"]))
+        rt_role.add_to_policy(iam.PolicyStatement(actions=["logs:PutResourcePolicy", "logs:DescribeResourcePolicies", "logs:PutRetentionPolicy"],
+                                                  resources=[f"arn:aws:logs:{region}:{acct}:log-group:/aws/bedrock-agentcore/runtimes/*", f"arn:aws:logs:{region}:{acct}:*"]))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets", "cloudwatch:PutMetricData"], resources=["*"]))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["bedrock-agentcore:GetWorkloadAccessToken", "bedrock-agentcore:GetWorkloadAccessTokenForJWT", "bedrock-agentcore:GetWorkloadAccessTokenForUserId"],
                                                   resources=[f"arn:aws:bedrock-agentcore:{region}:{acct}:workload-identity-directory/default", f"arn:aws:bedrock-agentcore:{region}:{acct}:workload-identity-directory/default/workload-identity/*"]))
@@ -213,8 +215,9 @@ class EsgPlatformStack(Stack):
                 "SYNC_STATE_MACHINE_ARN": sync_sm_arn, "DATA_TOOLS_FUNCTION": "esg-data-tools", "OUTPUT_BUCKET": output_bucket, "PLATFORM_FUNCTION": PLATFORM_FN_NAME, "KB_ID": kb_id, "BANK_ID": "GENERIC_FI_001",
                 "MAX_CORRECTION_ATTEMPTS": "4", "SECTION_BUDGET_USD": "0.40", "RUN_BUDGET_USD": "1.50", "AGENT_MEMORY_TABLE": memory.table_name, "MAX_PIPELINE_RESTARTS": "1", "MODEL_ROUTING_PROFILE": routing_profile, "USAGE_TABLE": usage.table_name,
                 "VALIDATOR_CALIBRATION": "on", "PII_TOKEN_SECRET_ARN": pii_secret.secret_name, "PII_REQUIRE_SECRET": "1", "USAGE_TTL_DAYS": "14"})
-        # AgentCore creates this group on first use without retention; creating it first applies the 14-day policy
-        logs.LogGroup(self, "RuntimeLogs", log_group_name=f"/aws/bedrock-agentcore/runtimes/{runtime.attr_agent_runtime_id}-DEFAULT", retention=two_weeks, removal_policy=RemovalPolicy.DESTROY)
+        # The runtime creates its own log group as soon as it starts, so the group cannot be created here (AlreadyExists).
+        # LogRetention is a custom resource that creates the group if needed and sets the 14-day retention either way.
+        logs.LogRetention(self, "RuntimeLogsRetention", log_group_name=f"/aws/bedrock-agentcore/runtimes/{runtime.attr_agent_runtime_id}-DEFAULT", retention=two_weeks)
         rt_role.add_to_policy(iam.PolicyStatement(actions=["dynamodb:PutItem"], resources=[usage.table_arn]))
         memory.grant_read_write_data(rt_role)
         runtime.node.add_dependency(rt_role)
