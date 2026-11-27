@@ -135,7 +135,9 @@ sequenceDiagram
     end
 ```
 Why asynchronous: API Gateway cuts requests at 30 seconds and an agent turn can take longer. Only the owner (or an admin)
-can read a job.
+can read a job. The conversation and the AgentCore session id are kept in the browser (per user, until the tab closes),
+so changing pages does not lose the chat; a turn that is still running is picked up again on return. "New chat" starts a
+new session. Every turn's tokens are metered (task `agent_chat`, with the user) for the FinOps page.
 
 ### 5.3 Report generation with adaptive self-correction
 ```mermaid
@@ -192,6 +194,8 @@ flowchart TD
   report sections and the suggested action. Admins can start a scan from the UI.
 - **Compliance readiness.** Each checklist item has a probe: rows exist in Athena, PCAF quality threshold, assurance
   level, a recent scenario run, or a manual attestation by an admin. The score is weighted by disclosure criticality.
+  A probe that cannot run (technical error) makes the item "Not checked": it is shown but left out of the score, so a
+  broken query never looks like a compliance gap.
 - **Scenario what-if.** A transparent screening model on the loan book: transition loss from a carbon price per sector,
   physical loss on property collateral in flood zones, green-loan opportunity. Sliders re-run it through the API.
 
@@ -230,10 +234,17 @@ cheap models are tried first only while they keep working. Stops when the sectio
 remain, every strategy was tried, or the budget is reached (USD 0.40 per section, USD 1.50 per run, at most 4 attempts).
 Unresolved sections stay in the report, flagged, with a plain-language review note. There is no approval gate yet.
 
-### 6.4 Run ledger
+### 6.4 Run ledger and checkpoints
 Every decision is an event in `s3://esg-output-reports-<acct>/agent-ledger/<execution>.json`: started, reviewed,
-regenerating (strategy, model, expected success, cost), re-validated, re-assembled, escalated. The UI shows it as the
-agent timeline with review notes and repair spend. A lock object prevents two supervisors from working on one run.
+regenerating (strategy, model, expected success, cost), re-validated, re-assembled, escalated. A lock object prevents
+two supervisors from working on one run.
+
+`GET /agent/runs/{id}/progress` merges the Step Functions execution history (inner steps, with per-item counts of the
+Map states such as "5/8 sections" or "3/4 tables") with the ledger (the agent's own steps: review, repair, re-assemble,
+triage, ETL). The UI shows this as a live checkpoint list in the chat (right after the agent starts a run), in the Agent
+activity panel and on Report Runs. Each run has a one-line summary in its pipeline's terms
+("4/4 tables loaded · ETL finished", "2 section(s) repaired · 1 need review"), and the ETL a data sync starts is shown
+under it as a child run. Review notes carry their own label (Loaded, Repaired, Needs review, Source data problem).
 
 ---
 

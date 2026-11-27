@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendChat, checkStatus } from '../api'
 import { useTheme } from '../ThemeContext'
-import { Send, Bot, User, Loader2, CheckCircle2, AlertCircle, Download, Sparkles } from 'lucide-react'
+import { Send, Bot, User, Loader2, CheckCircle2, AlertCircle, Download, Sparkles, SquarePen } from 'lucide-react'
+import RunProgress from '../components/RunProgress'
+import { currentUser } from '../lib/auth'
 import AgentActivity from '../components/AgentActivity'
 import { Pill } from '../components/ui'
-import { askAgent, platformEnabled } from '../lib/platform'
+import { platformEnabled, submitAgent, waitAgent } from '../lib/platform'
 
 // AgentCore needs a session id of at least 33 characters. crypto.randomUUID only exists in secure contexts (https), so fall back to getRandomValues.
 function newSessionId() {
@@ -12,13 +14,27 @@ function newSessionId() {
   return 'esg-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+// The conversation survives page changes: it is kept in sessionStorage (per signed-in user, cleared when the tab closes).
+// The AgentCore session id is kept too, so the agent still has the context while its session is alive.
+const storeKey = () => `esg.chat.v1.${currentUser()?.email || 'demo'}`
+const loadChat = () => { try { return JSON.parse(sessionStorage.getItem(storeKey())) || {} } catch { return {} } }
+
 export default function Chat() {
   const { isDark } = useTheme()
-  const [messages, setMessages] = useState([])
+  const saved = useRef(loadChat()).current
+  const [messages, setMessages] = useState(saved.messages || [])
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [sessionId] = useState(newSessionId)
-  const [focusId, setFocusId] = useState(null)
+  const [loading, setLoading] = useState(Boolean(saved.pending))
+  const [sessionId, setSessionId] = useState(saved.sessionId || newSessionId())
+  const [focusId, setFocusId] = useState(saved.focusId || null)
+  const [pending, setPending] = useState(saved.pending || null) // {jobId} of a turn that is still running on the server
+  useEffect(() => {
+    sessionStorage.setItem(storeKey(), JSON.stringify({ messages: messages.slice(-60), sessionId, focusId, pending }))
+  }, [messages, sessionId, focusId, pending])
+
+  function newChat() {
+    setMessages([]); setFocusId(null); setPending(null); setLoading(false); setSessionId(newSessionId())
+  }
   const [polling, setPolling] = useState(false)
   const [executionId, setExecutionId] = useState(null)
   const chatEnd = useRef(null)
@@ -69,9 +85,35 @@ export default function Chat() {
     setMessages(prev => [...prev, { role: 'user', text: userMsg }])
     setLoading(true)
     try {
-      const data = platformEnabled
-        ? await askAgent(userMsg, sessionId)
-        : await sendChat(userMsg, sessionId)
+      let data
+      if (platformEnabled) {
+        const job = await submitAgent(userMsg, sessionId)
+        setPending({ jobId: job.job_id })
+        data = await waitAgent(job.job_id)
+      } else {
+        data = await sendChat(userMsg, sessionId)
+      }
+      handleReply(data)
+    } catch (e) {
+      setMessages(prev => [...prev, { role: 'system', type: 'error', text: `Connection error: ${e.message}` }])
+    }
+    setPending(null)
+    setLoading(false)
+  }
+
+  // A turn that was still running when the user left the page: pick up its answer.
+  useEffect(() => {
+    if (!platformEnabled || !saved.pending?.jobId) return undefined
+    let stop = false
+    waitAgent(saved.pending.jobId)
+      .then((data) => { if (!stop) handleReply(data) })
+      .catch((e) => { if (!stop) setMessages(prev => [...prev, { role: 'system', type: 'error', text: `Connection error: ${e.message}` }]) })
+      .finally(() => { if (!stop) { setPending(null); setLoading(false) } })
+    return () => { stop = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function handleReply(data) {
       const reply = data.response || data.message || JSON.stringify(data)
       setMessages(prev => [...prev, { role: 'assistant', text: reply }])
       // Detect execution ID for polling
@@ -79,7 +121,7 @@ export default function Chat() {
       if (match) {
         setFocusId(match[1])
         if (platformEnabled) {
-          setMessages(prev => [...prev, { role: 'system', type: 'info', text: 'The AgentCore orchestrator is supervising this run. It validates every section and repairs failures on its own. Follow the timeline on the right; the download appears there when the report is ready.' }])
+          setMessages(prev => [...prev, { role: 'system', type: 'run', executionId: match[1] }])
         } else {
           setExecutionId(match[1])
           setPolling(true)
@@ -92,10 +134,6 @@ export default function Chat() {
           }])
         }
       }
-    } catch (e) {
-      setMessages(prev => [...prev, { role: 'system', type: 'error', text: `Connection error: ${e.message}` }])
-    }
-    setLoading(false)
   }
 
   function handleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
@@ -116,6 +154,7 @@ export default function Chat() {
             <h2 className="text-xl font-display font-bold text-white tracking-tight">Ask, generate, and let the agent fix what fails</h2>
           </div>
           {platformEnabled ? <Pill tone="green">AgentCore Runtime</Pill> : <Pill tone="slate">Bedrock Agent (legacy)</Pill>}
+          <button onClick={newChat} disabled={loading} title="Start a new conversation" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-xs text-white/75 hover:bg-white/10 disabled:opacity-40"><SquarePen size={13} />New chat</button>
         </div>
       </div>
 
@@ -269,6 +308,10 @@ function parseInlineMarkdown(text) {
 function MessageBubble({ message }) {
   const { isDark } = useTheme()
   const { role, text, type, download_url, download_url_pptx } = message
+
+  if (role === 'system' && type === 'run') {
+    return <div className="max-w-[80%]"><RunProgress executionId={message.executionId} /></div>
+  }
 
   if (role === 'user') {
     return (

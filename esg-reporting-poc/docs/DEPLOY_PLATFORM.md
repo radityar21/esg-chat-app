@@ -376,6 +376,8 @@ Errors met during the first deployment and what they mean:
 | Sign-in loops or `redirect_mismatch` | `appUrl` differs from the Amplify URL | redeploy `EsgPlatformStack` with the exact `-c appUrl=` |
 | API returns 403 after sign-in | user is in no group | `admin-add-user-to-group` (section 8) |
 | Pages show "Demo data" after release | Amplify variables missing or misspelled | `aws amplify get-app --app-id $APPID --query "app.environmentVariables"` |
+| Badge "Demo data · live data failed: data query failed" | an Athena query failed (permissions, missing table or data) | `aws logs tail /aws/lambda/esg-platform-api --since 30m` |
+| Compliance items "Not checked" | the readiness probe could not query Athena | same log; once fixed the items are scored again |
 
 When a deploy fails, the useful part is the `Failed resources` block and the CloudTrail lines under it.
 

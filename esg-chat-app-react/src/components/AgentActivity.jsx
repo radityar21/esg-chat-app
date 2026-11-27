@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Play, ScanSearch, Wand2, CheckCircle2, AlertTriangle, FileText, XCircle, RotateCcw, Loader2, Download, Bot, RefreshCw } from 'lucide-react'
+import { CornerDownRight, Play, ScanSearch, Wand2, CheckCircle2, AlertTriangle, FileText, XCircle, RotateCcw, Loader2, Download, Bot, RefreshCw } from 'lucide-react'
 import { api, platformEnabled } from '../lib/platform'
 import { Pill } from './ui'
+import RunProgress from './RunProgress'
 
 const EV = {
   pipeline_started: { icon: Play, color: 'text-accent-blue' },
@@ -25,8 +26,9 @@ const EV = {
   etl_finished: { icon: CheckCircle2, color: 'text-esg-green' },
 }
 const TONE = { completed: 'green', running: 'blue', escalated: 'amber', failed: 'red', pending: 'slate' }
-const NOTE = { info: { tone: 'border-esg-green/25 bg-esg-green/[0.05]', label: 'Repaired', c: 'text-esg-green' }, review: { tone: 'border-esg-amber/30 bg-esg-amber/[0.06]', label: 'Needs review', c: 'text-esg-amber' }, action: { tone: 'border-esg-red/30 bg-esg-red/[0.06]', label: 'Action needed', c: 'text-esg-red' } }
+const NOTE = { ok: { tone: 'border-white/10 bg-white/[0.03]', label: 'Done', c: 'text-esg-green' }, info: { tone: 'border-esg-green/25 bg-esg-green/[0.05]', label: 'Repaired', c: 'text-esg-green' }, review: { tone: 'border-esg-amber/30 bg-esg-amber/[0.06]', label: 'Needs review', c: 'text-esg-amber' }, action: { tone: 'border-esg-red/30 bg-esg-red/[0.06]', label: 'Action needed', c: 'text-esg-red' } }
 const STRAT = { fix_cheap: 'Fast model', fix_strong: 'Stronger model', grounded_cheap: 'Source numbers only · fast', grounded_strong: 'Source numbers only · strong', critic_strong: 'AI hint · strong', minimal_safe: 'Safe short text' }
+const LABEL = { esg_report: 'Report', data_sync: 'Data sync', ghg_inventory: 'ETL + GHG inventory' }
 const timeOf = (iso) => (iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '')
 
 /** Live view of what the AgentCore orchestrator did for each report run (reads the S3 ledger through the platform API). */
@@ -59,22 +61,36 @@ export default function AgentActivity({ focusId, compact = false }) {
     return <div className="text-xs text-white/40 leading-relaxed">Agent activity appears here once the platform API is configured (VITE_PLATFORM_API_URL).</div>
   }
   const sections = ledger ? Object.entries(ledger.sections || {}) : []
+  // children (the ETL a data sync started) are listed directly under their parent
+  const byId = Object.fromEntries(runs.map((r) => [r.execution_id, r]))
+  const ordered = runs.filter((r) => !r.parent_execution_id || !byId[r.parent_execution_id]).flatMap((r) => [
+    r, ...runs.filter((c) => c.parent_execution_id === r.execution_id).map((c) => ({ ...c, child: true }))])
   return (
     <div className="space-y-4">
       {error && <div className="text-[11px] text-esg-amber">Cannot read agent runs: {error}</div>}
       {runs.length === 0 && !error && <div className="text-xs text-white/40">No agent runs yet. Ask the assistant to generate a report.</div>}
       <div className="space-y-1.5">
-        {runs.map((r) => (
-          <button key={r.execution_id} onClick={() => setSel(r.execution_id)}
+        {ordered.map((r) => (
+          <div key={r.execution_id} className={r.child ? 'pl-4' : ''}>
+          <button onClick={() => setSel(r.execution_id)}
             className={`w-full text-left rounded-xl px-3 py-2 border transition ${sel === r.execution_id ? 'border-accent-teal/40 bg-accent-teal/[0.07]' : 'border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.05]'}`}>
             <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[11px] text-white/70 truncate">{(r.execution_id || '').slice(0, 13)}</span>
+              <span className="text-[11px] text-white/80 truncate inline-flex items-center gap-1">{r.child && <CornerDownRight size={11} className="text-white/40" />}{LABEL[r.pipeline] || r.pipeline || 'run'}{r.year ? ` ${r.year}` : ''}{r.framework ? ` · ${r.framework}` : ''}</span>
               <Pill tone={TONE[r.status] || 'slate'}>{r.status}</Pill>
             </div>
-            <div className="text-[10px] text-white/35 mt-1">{r.pipeline || 'pipeline'} · {r.healed ? `${r.healed} section(s) auto-repaired` : 'no repairs'}{r.escalated ? ` · ${r.escalated} escalated` : ''}</div>
+            <div className="text-[10px] text-white/40 mt-1">{r.summary || r.status}</div>
+            <div className="text-[9px] text-white/25 font-mono mt-0.5">{(r.execution_id || '').slice(0, 13)}</div>
           </button>
+          </div>
         ))}
       </div>
+
+      {sel && (
+        <div>
+          <div className="eyebrow mb-2">Checkpoints</div>
+          <RunProgress key={sel} executionId={sel} compact />
+        </div>
+      )}
 
       {ledger && (
         <div>
@@ -117,7 +133,7 @@ export default function AgentActivity({ focusId, compact = false }) {
                   const m = NOTE[n.level] || NOTE.info
                   return (
                     <div key={i} className={`rounded-xl border px-3 py-2 ${m.tone}`}>
-                      <div className="flex items-center gap-2 mb-0.5"><span className={`text-[10px] font-semibold uppercase tracking-wide ${m.c}`}>{m.label}</span><span className="text-[11px] text-white/70">{n.section}</span></div>
+                      <div className="flex items-center gap-2 mb-0.5"><span className={`text-[10px] font-semibold uppercase tracking-wide ${m.c}`}>{n.label || m.label}</span><span className="text-[11px] text-white/70">{n.section}</span></div>
                       <div className="text-[11px] text-white/60 leading-relaxed">{n.text}</div>
                     </div>
                   )

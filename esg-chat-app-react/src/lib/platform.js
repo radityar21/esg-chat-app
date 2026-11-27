@@ -76,13 +76,23 @@ export function useDebouncedPost(path, body, { enabled = true, delay = 350 } = {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
+/** Queue a chat turn for the AgentCore orchestrator. Returns {job_id, session_id}. */
+export function submitAgent(prompt, sessionId) {
+  return api('/agent/chat', { method: 'POST', body: { prompt, session_id: sessionId } })
+}
+
 /** Ask the AgentCore orchestrator. The turn runs asynchronously on the server; this polls until it is done. */
-export async function askAgent(prompt, sessionId, { maxWaitMs = 300000 } = {}) {
-  const job = await api('/agent/chat', { method: 'POST', body: { prompt, session_id: sessionId } })
+export async function askAgent(prompt, sessionId, opts = {}) {
+  const job = await submitAgent(prompt, sessionId)
+  return waitAgent(job.job_id, opts)
+}
+
+/** Poll a queued chat turn until it has an answer. Safe to call again after a page change (resume). */
+export async function waitAgent(jobId, { maxWaitMs = 300000 } = {}) {
   const t0 = Date.now()
   while (Date.now() - t0 < maxWaitMs) {
     await sleep(2000)
-    const s = await api(`/agent/chat/${job.job_id}`)
+    const s = await api(`/agent/chat/${jobId}`)
     if (s.found === false) throw new Error('The request was lost. Please ask again.')
     if (s.status === 'done') return s.result
     if (s.status === 'failed') throw new Error('The agent could not answer. Please try again.')

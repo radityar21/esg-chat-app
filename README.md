@@ -117,7 +117,7 @@ esg-chat-app-react/src/
 ├── pages/                    Home (Command Center), Compliance, Frameworks (Reports & Scenarios), Portfolio,
 │                             Governance, GhgInventory, Chat (AI Assistant), Reports (Report Runs), Reference
 │                             Overview.jsx and Analytics.jsx are older pages, not in the menu
-├── components/               ui.jsx (design system), Sidebar, AgentActivity (agent timeline + review notes),
+├── components/               ui.jsx (design system), Sidebar, AgentActivity (runs, timeline, review notes), RunProgress (checkpoints),
 │                             AuthGate (sign-in screen), SourceBadge ("Live · AWS" vs "Demo data")
 ├── lib/                      platform.js (API client, live/demo switch, async chat), auth.js (Cognito PKCE)
 ├── data/                     demo datasets and adapters that turn API responses into page data
@@ -148,7 +148,8 @@ Live or demo: with the three `VITE_*` variables set (Amplify environment) every 
 | Add an AWS resource or permission | `infra/stacks/*.py` (see the stack table in ARCHITECTURE.md) |
 | Change a page | `esg-chat-app-react/src/pages/` |
 | Change colours, cards, charts style | `esg-chat-app-react/src/components/ui.jsx`, `tailwind.config.js` |
-| See why a run failed | Report Runs page (agent timeline), or the logs in DEPLOY_PLATFORM.md section 11.3 |
+| Change the run checkpoints shown in the UI | `lambda/platform_api/progress.py`, `esg-chat-app-react/src/components/RunProgress.jsx` |
+| See why a run failed | Report Runs page (checkpoints and agent timeline), or the logs in DEPLOY_PLATFORM.md section 11.3 |
 
 ---
 
