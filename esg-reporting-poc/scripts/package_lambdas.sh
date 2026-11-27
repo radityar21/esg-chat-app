@@ -51,6 +51,5 @@ PY
 
   aws s3 sync templates "s3://esg-kb-documents-$ACCOUNT_ID/prompts/templates/" --region "$REGION" --exclude "*" --include "*.txt"
   aws s3 sync prompts "s3://esg-kb-documents-$ACCOUNT_ID/prompts/" --region "$REGION" --exclude "*" --include "*.txt"
-  aws s3 sync data/synthetic/scope3_operational "s3://esg-data-raw-$ACCOUNT_ID/raw/scope3_operational_activity/" --region "$REGION" --exclude "*.csv"
 fi
 echo "done"
