@@ -64,8 +64,7 @@ EventBridge rules and a dead-letter queue.
 $o = aws cloudformation describe-stacks --stack-name EsgPlatformStack --query "Stacks[0].Outputs" | ConvertFrom-Json
 $secret = ($o | ? OutputKey -eq PiiSecretArn).OutputValue
 $policy = ($o | ? OutputKey -eq PipelineExtrasPolicyArn).OutputValue
-$env:PII_TOKEN_SECRET_ARN = $secret; $env:USAGE_TABLE = "esg-llm-usage"
-wsl bash scripts/package_lambdas.sh          # updates the 4 Lambdas, merges env vars, syncs templates/prompts/data
+.\scripts\package_lambdas.ps1 -PiiSecretArn $secret   # updates the 4 Lambdas, merges env vars, syncs templates/prompts
 $role = (aws lambda get-function-configuration --function-name esg-section-gen --query Role --output text).Split('/')[-1]
 aws iam attach-role-policy --role-name $role --policy-arn $policy
 python scripts/apply_lifecycle.py            # 14-day expiry for ledger, executions, cache (keeps existing rules)
