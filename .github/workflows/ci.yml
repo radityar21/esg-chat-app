@@ -19,11 +19,12 @@ jobs:
           python-version: '3.12'
       - run: pip install pytest boto3 pyyaml aws-cdk-lib constructs pg8000
       - run: python -m pytest tests -q
+      - name: Build artifacts (Lambda packages, layers, agent zip)
+        run: python scripts/build_all.py
       - name: CDK synth
         run: |
-          mkdir -p build/layer/python build/pglayer/python
           cd infra
-          CDK_OUTDIR=$RUNNER_TEMP/cdkout CDK_DEFAULT_ACCOUNT=061039769766 CDK_CONTEXT_JSON='{"appUrl":"https://main-agentcore.example.amplifyapp.com","agentPackaging":"container"}' python app.py
+          CDK_OUTDIR=$RUNNER_TEMP/cdkout CDK_DEFAULT_ACCOUNT=061039769766 CDK_CONTEXT_JSON='{"appUrl":"https://main-agentcore.example.amplifyapp.com"}' python app.py
   frontend:
     runs-on: ubuntu-latest
     defaults:

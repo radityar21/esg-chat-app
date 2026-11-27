@@ -303,3 +303,38 @@ def test_chat_validation():
         agent_api.chat_submit({"prompt": "x" * 5000}, jobs=FakeJobs(), invoke=lambda p: None)
     with pytest.raises(ValueError):
         agent_api.chat_status("not-a-job", "u", jobs=FakeJobs())
+
+
+# ── Reports history / reference documents ─────────────────────────────────────────────────────────
+def test_reports_history_and_documents():
+    from datetime import datetime, timedelta, timezone
+    from platform_api import reports
+    t0 = datetime(2026, 11, 27, 10, tzinfo=timezone.utc)
+
+    class Sfn:
+        def list_executions(self, stateMachineArn, statusFilter, maxResults):
+            if statusFilter == "SUCCEEDED":
+                return {"executions": [{"name": "e1", "executionArn": "arn:e1", "startDate": t0, "stopDate": t0 + timedelta(seconds=90)}]}
+            if statusFilter == "FAILED":
+                return {"executions": [{"name": "e0", "executionArn": "arn:e0", "startDate": t0 - timedelta(hours=1), "stopDate": t0}]}
+            return {"executions": []}
+
+        def describe_execution(self, executionArn):
+            return {"input": json.dumps({"framework": "GRI_305", "reporting_year": 2024}),
+                    "output": json.dumps({"assembly_result": {"s3_path": "s3://b/k.docx", "sections_assembled": 7}})}
+
+    h = reports.history({"limit": "5"}, sfn=Sfn(), presign=lambda p: "https://signed/" + p if p else None)
+    assert [r["execution_id"] for r in h["executions"]] == ["e1", "e0"] and h["executions"][0]["duration_seconds"] == 90
+    assert h["executions"][0]["download_url"] == "https://signed/s3://b/k.docx" and h["total_failed"] == 1
+    with pytest.raises(ValueError):
+        reports.history({"limit": "x"}, sfn=Sfn())
+
+    class S3:
+        def get_paginator(self, _):
+            class P:
+                def paginate(self, **kw):
+                    return [{"Contents": [{"Key": "documents/gri/GRI_305.pdf", "Size": 2048}, {"Key": "documents/gri/GRI_305.pdf.metadata.json", "Size": 10},
+                                          {"Key": "documents/ifrs/S2.pdf", "Size": 1024}]}]
+            return P()
+    d = reports.documents({}, s3=S3())
+    assert [x["filename"] for x in d["documents"]] == ["GRI_305.pdf", "S2.pdf"] and d["documents"][0]["category"] == "gri" and d["documents"][0]["size_kb"] == 2

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { getDocuments } from '../api'
 import { BookOpen, FileText, Loader2, Database, Globe, Shield, Landmark, Search } from 'lucide-react'
 import { PageHeader, Panel } from '../components/ui'
+import { api, platformEnabled } from '../lib/platform'
 
 // Static class strings: Tailwind cannot see class names that are assembled at runtime.
 const TONES = {
@@ -16,6 +17,9 @@ const CATEGORY_CONFIG = {
   gri: { icon: Globe, tone: 'green', label: 'GRI Standards' },
   ifrs: { icon: Landmark, tone: 'blue', label: 'IFRS S2' },
   esrs: { icon: Shield, tone: 'purple', label: 'ESRS / CSRD' },
+  csrd: { icon: Shield, tone: 'purple', label: 'ESRS / CSRD' },
+  ghg_methodology: { icon: Database, tone: 'blue', label: 'GHG methodology (GHG Protocol, PCAF, IPCC)' },
+  style_reference: { icon: FileText, tone: 'teal', label: 'Sample sustainability reports' },
   ojk: { icon: Database, tone: 'amber', label: 'OJK PSPK' },
   benchmarks: { icon: FileText, tone: 'teal', label: 'Benchmarks' },
   default: { icon: FileText, tone: 'slate', label: 'Documents' },
@@ -38,7 +42,7 @@ export default function Reference() {
   const [q, setQ] = useState('')
 
   useEffect(() => {
-    getDocuments().then((d) => setDocs(d.documents || [])).catch((e) => console.error(e)).finally(() => setLoading(false))
+    (platformEnabled ? api('/reference/documents') : getDocuments()).then((d) => setDocs(d.documents || [])).catch((e) => console.error(e)).finally(() => setLoading(false))
   }, [])
 
   const grouped = useMemo(() => docs

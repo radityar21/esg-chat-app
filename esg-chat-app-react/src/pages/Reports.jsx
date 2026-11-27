@@ -21,7 +21,7 @@ export default function Reports() {
   async function loadHistory() {
     setLoading(true)
     try {
-      const data = await getHistory(20)
+      const data = platformEnabled ? await api('/reports/history?limit=20') : await getHistory(20)
       setExecutions(data.executions || [])
     } catch (e) { console.error(e) }
     if (platformEnabled) {

@@ -7,6 +7,7 @@ HTTP routes (API Gateway HTTP API, payload v2, Cognito JWT authorizer on every r
     GET  /portfolio?year=                    POST /scenario                     POST /governance/pii-mask
     GET  /governance/finops?days=            POST /agent/chat                   GET  /agent/chat/{job_id}
     GET  /agent/runs                         GET  /agent/runs/{id}              GET  /health
+    GET  /reports/history?limit=             GET  /reference/documents
 Roles come from the ``cognito:groups`` claim: ``admin`` and ``viewer``. A user in neither group is rejected.
 Direct invocations are protected by IAM only.
 """
@@ -18,7 +19,7 @@ import json
 import logging
 from typing import Any, Callable
 
-from platform_api import agent_api, common, compliance, ghg, governance, portfolio
+from platform_api import agent_api, common, compliance, ghg, governance, portfolio, reports
 
 log = logging.getLogger()
 log.setLevel(logging.INFO)
@@ -39,6 +40,8 @@ ACTIONS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "agent_chat": agent_api.chat_submit,
     "agent_chat_worker": agent_api.chat_worker,
     "agent_runs": agent_api.runs,
+    "reports_history": reports.history,
+    "reference_documents": reports.documents,
 }
 
 ROUTES: dict[tuple[str, str], str] = {
@@ -47,6 +50,7 @@ ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/ghg/inventory"): "ghg_inventory", ("GET", "/portfolio"): "portfolio", ("POST", "/scenario"): "scenario",
     ("POST", "/governance/pii-mask"): "pii_mask", ("GET", "/governance/finops"): "finops_summary",
     ("POST", "/agent/chat"): "agent_chat", ("GET", "/agent/runs"): "agent_runs",
+    ("GET", "/reports/history"): "reports_history", ("GET", "/reference/documents"): "reference_documents",
 }
 ADMIN_ONLY = {"compliance_attest", "regulatory_scan_start"}
 

@@ -57,7 +57,7 @@ IMAGE_EXCLUDE = ["data", "result", "docs", "infra", "cdk.out", "tests", "glue_jo
 
 
 class EsgPlatformStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, *, app_url: str, dev_origin: str | None = None,
+    def __init__(self, scope: Construct, construct_id: str, *, app_url: str, kb_id: str, dev_origin: str | None = None,
                  company_name: str = "Bank Nusantara Sejahtera", routing_profile: str = "quality", agent_packaging: str = "zip", **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         acct, region = self.account, self.region
@@ -91,8 +91,7 @@ class EsgPlatformStack(Stack):
             supported_identity_providers=[cognito.UserPoolClientIdentityProvider.COGNITO])
 
         # ── secrets and guardrail ──────────────────────────────────────────────────────────────────
-        pii_secret = secretsmanager.Secret(self, "PiiTokenSecret", secret_name="esg/pii-token-secret", description="HMAC key for PII pseudonyms (do not rotate casually: tokens would change)",
-                                           generate_secret_string=secretsmanager.SecretStringGenerator(password_length=48, exclude_punctuation=True))
+        pii_secret = secretsmanager.Secret.from_secret_name_v2(self, "PiiTokenSecret", "esg/pii-token-secret")  # created by EsgFoundationStack
         guardrail = bedrock.CfnGuardrail(
             self, "PiiGuardrail", name="esg-pii-guardrail", description="Second layer behind the regex masker (UU PDP)",
             blocked_input_messaging="This request contains personal data that cannot be processed.", blocked_outputs_messaging="The response was withheld because it contained personal data.",
@@ -112,11 +111,6 @@ class EsgPlatformStack(Stack):
         jobs = ddb.Table(self, "ChatJobsTable", table_name="esg-chat-jobs", partition_key=ddb.Attribute(name="job_id", type=ddb.AttributeType.STRING),
                          billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")
 
-        meter_policy = iam.ManagedPolicy(self, "PipelineExtrasPolicy", managed_policy_name="esg-pipeline-extras",
-                                         description="Attach to the existing pipeline Lambda roles (section_gen): token usage metering and the PII secret.",
-                                         statements=[iam.PolicyStatement(actions=["dynamodb:PutItem"], resources=[usage.table_arn]),
-                                                     iam.PolicyStatement(actions=["secretsmanager:GetSecretValue"], resources=[pii_secret.secret_arn])])
-
         # ── platform API Lambda ────────────────────────────────────────────────────────────────────
         layer_dir = POC / "build" / "layer"
         layers = [_lambda.LayerVersion(self, "Boto3Layer", code=_lambda.Code.from_asset(str(layer_dir)), compatible_runtimes=[_lambda.Runtime.PYTHON_3_12],
@@ -128,7 +122,7 @@ class EsgPlatformStack(Stack):
             "OUTPUT_BUCKET": output_bucket, "BANK_ID": "GENERIC_FI_001", "COMPANY_NAME": company_name, "BASE_YEAR": "2023", "AWS_ACCOUNT_ID": acct,
             "USAGE_TABLE": usage.table_name, "MODEL_ROUTING_PROFILE": routing_profile, "ALLOWED_ORIGIN": origins[0],
             "ATHENA_WORKGROUP": "esg-reporting-workgroup", "CHAT_JOBS_TABLE": jobs.table_name, "USAGE_TTL_DAYS": "14", "JOB_TTL_DAYS": "14",
-            "PII_TOKEN_SECRET_ARN": pii_secret.secret_arn, "PII_REQUIRE_SECRET": "1",
+            "PII_TOKEN_SECRET_ARN": pii_secret.secret_name, "PII_REQUIRE_SECRET": "1",
             "PII_GUARDRAIL_ID": guardrail.attr_guardrail_id, "PII_GUARDRAIL_VERSION": guardrail_version.attr_version,
         }
         platform_fn = _lambda.Function(
@@ -148,6 +142,8 @@ class EsgPlatformStack(Stack):
                                                                       f"arn:aws:glue:{region}:{acct}:table/esg_*/*"]))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["s3:GetObject", "s3:ListBucket", "s3:GetBucketLocation"], resources=bucket_arns + bucket_objs))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["s3:PutObject", "s3:AbortMultipartUpload"], resources=[f"arn:aws:s3:::{output_bucket}/*"]))
+        platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["states:ListExecutions", "states:DescribeExecution"],
+                                                           resources=[report_sm_arn, f"arn:aws:states:{region}:{acct}:execution:{REPORT_SM_NAME}:*"]))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["bedrock:InvokeModel"], resources=model_arns))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["bedrock:ApplyGuardrail"], resources=[guardrail.attr_guardrail_arn]))
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["bedrock-agentcore:InvokeAgentRuntime"], resources=[f"arn:aws:bedrock-agentcore:{region}:{acct}:runtime/*"]))
@@ -206,7 +202,7 @@ class EsgPlatformStack(Stack):
         rt_role.add_to_policy(iam.PolicyStatement(actions=["lambda:InvokeFunction"], resources=fn_arns))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["s3:GetObject", "s3:ListBucket"], resources=bucket_arns + bucket_objs))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["s3:PutObject", "s3:DeleteObject"], resources=[f"arn:aws:s3:::{output_bucket}/*"]))
-        rt_role.add_to_policy(iam.PolicyStatement(actions=["bedrock:Retrieve"], resources=[f"arn:aws:bedrock:{region}:{acct}:knowledge-base/WVREXI1LEI"]))
+        rt_role.add_to_policy(iam.PolicyStatement(actions=["bedrock:Retrieve"], resources=[f"arn:aws:bedrock:{region}:{acct}:knowledge-base/{kb_id}"]))
 
         runtime = agentcore.CfnRuntime(
             self, "OrchestratorRuntime", agent_runtime_name="esg_orchestrator", description="ESG report orchestrator: routes requests, supervises Step Functions, self-corrects validation failures",
@@ -214,9 +210,9 @@ class EsgPlatformStack(Stack):
             network_configuration=agentcore.CfnRuntime.NetworkConfigurationProperty(network_mode="PUBLIC"),
             environment_variables={
                 "AWS_REGION": region, "AWS_ACCOUNT_ID": acct, "REPORT_STATE_MACHINE_ARN": report_sm_arn, "GHG_STATE_MACHINE_ARN": ghg_sm_arn,
-                "SYNC_STATE_MACHINE_ARN": sync_sm_arn, "DATA_TOOLS_FUNCTION": "esg-data-tools", "OUTPUT_BUCKET": output_bucket, "PLATFORM_FUNCTION": PLATFORM_FN_NAME, "KB_ID": "WVREXI1LEI", "BANK_ID": "GENERIC_FI_001",
+                "SYNC_STATE_MACHINE_ARN": sync_sm_arn, "DATA_TOOLS_FUNCTION": "esg-data-tools", "OUTPUT_BUCKET": output_bucket, "PLATFORM_FUNCTION": PLATFORM_FN_NAME, "KB_ID": kb_id, "BANK_ID": "GENERIC_FI_001",
                 "MAX_CORRECTION_ATTEMPTS": "4", "SECTION_BUDGET_USD": "0.40", "RUN_BUDGET_USD": "1.50", "AGENT_MEMORY_TABLE": memory.table_name, "MAX_PIPELINE_RESTARTS": "1", "MODEL_ROUTING_PROFILE": routing_profile, "USAGE_TABLE": usage.table_name,
-                "VALIDATOR_CALIBRATION": "on", "PII_TOKEN_SECRET_ARN": pii_secret.secret_arn, "PII_REQUIRE_SECRET": "1", "USAGE_TTL_DAYS": "14"})
+                "VALIDATOR_CALIBRATION": "on", "PII_TOKEN_SECRET_ARN": pii_secret.secret_name, "PII_REQUIRE_SECRET": "1", "USAGE_TTL_DAYS": "14"})
         # AgentCore creates this group on first use without retention; creating it first applies the 14-day policy
         logs.LogGroup(self, "RuntimeLogs", log_group_name=f"/aws/bedrock-agentcore/runtimes/{runtime.attr_agent_runtime_id}-DEFAULT", retention=two_weeks, removal_policy=RemovalPolicy.DESTROY)
         rt_role.add_to_policy(iam.PolicyStatement(actions=["dynamodb:PutItem"], resources=[usage.table_arn]))
@@ -248,5 +244,3 @@ class EsgPlatformStack(Stack):
         CfnOutput(self, "GhgStateMachineArn", value=ghg_sm_arn)
         CfnOutput(self, "UsageTableName", value=usage.table_name)
         CfnOutput(self, "AgentMemoryTableName", value=memory.table_name)
-        CfnOutput(self, "PipelineExtrasPolicyArn", value=meter_policy.managed_policy_arn, description="Attach to the existing esg-section-gen role")
-        CfnOutput(self, "PiiSecretArn", value=pii_secret.secret_arn, description="PII_TOKEN_SECRET_ARN for the existing esg-section-gen Lambda")
