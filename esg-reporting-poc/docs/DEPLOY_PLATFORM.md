@@ -11,14 +11,41 @@ Single environment (`prod`) in account `061039769766`, region `us-east-1`. Front
    Install the Amplify GitHub App when asked. Leave the monorepo "app root" empty (the root `amplify.yml` handles it).
    Do not deploy yet; note the app id and the branch URL `https://main-agentcore.<appId>.amplifyapp.com`.
 
-## 1. Data
+## 1. Source database (network, RDS, extract job)
+Three stacks, deployed in this order. The database is PostgreSQL 16 (db.t4g.small, single AZ, encrypted, TLS only, 7-day
+backups, deletion protection) in isolated subnets without NAT.
 ```powershell
 $ACCT = "061039769766"; $env:AWS_REGION = "us-east-1"
-aws s3 sync data/synthetic/scope3_operational "s3://esg-data-raw-$ACCT/raw/scope3_operational_activity/" --exclude "*.csv"
-aws athena start-query-execution --work-group esg-reporting-workgroup --query-string (Get-Content sql/ddl/05_scope3_operational.sql -Raw)
+New-Item -ItemType Directory -Force build\pglayer\python | Out-Null
+python -m pip install --upgrade --target build\pglayer\python "pg8000>=1.31"
+cd infra; python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
+cdk deploy EsgNetworkStack EsgDatabaseStack --app "python app.py"      # RDS takes about 10 minutes
+cd ..
+aws s3 cp data/seed/rds "s3://esg-data-raw-$ACCT/seed/rds/" --recursive   # synthetic data used as the "database" content
+cd infra; cdk deploy EsgDataStack --app "python app.py"; cd ..
 ```
+Create the schema, the read-only user and load the data (the Lambda runs inside the VPC):
+```powershell
+'{"action":"init"}' | Set-Content p.json -Encoding ascii
+aws lambda invoke --function-name esg-rds-seed --payload fileb://p.json --cli-binary-format raw-in-base64-out out.json; Get-Content out.json
+'{"action":"load","reload":true}' | Set-Content p.json -Encoding ascii
+aws lambda invoke --function-name esg-rds-seed --payload fileb://p.json --cli-binary-format raw-in-base64-out out.json; Get-Content out.json
+```
+Test the extract without the agent:
+```powershell
+$SYNC = "arn:aws:states:us-east-1:${ACCT}:stateMachine:ESGDataSyncStateMachine"
+aws stepfunctions start-execution --state-machine-arn $SYNC --input '{\"reporting_year\":2024,\"tables\":[\"hr_metrics\"]}'
+```
+Demonstrate the agent's triage: plant a problem, ask the assistant to "sync the 2024 data from the database", then restore.
+```powershell
+'{"action":"inject","kind":"rename_column"}' | Set-Content p.json -Encoding ascii   # blocking: contract violation on hr_metrics
+aws lambda invoke --function-name esg-rds-seed --payload fileb://p.json --cli-binary-format raw-in-base64-out out.json
+'{"action":"reset"}' | Set-Content p.json -Encoding ascii                          # drops the tables and reloads clean data
+aws lambda invoke --function-name esg-rds-seed --payload fileb://p.json --cli-binary-format raw-in-base64-out out.json
+```
+(`kind":"range"` plants a warning only: the load goes ahead and the note asks the data owner to confirm.)
 
-## 2. Backend stack
+## 2. Platform stack
 ```powershell
 New-Item -ItemType Directory -Force build\layer\python | Out-Null
 python -m pip install --upgrade --target build\layer\python "boto3>=1.40"
@@ -97,4 +124,5 @@ ask it to generate a GRI 305 report for 2024 and follow the timeline in Agent ac
 
 ## Known limits
 - Regulatory sources and peer scores are illustrative; the TKBI split per sector is an assumption.
-- Not built yet: data connectors (RDS ETL), see the roadmap.
+- Source database: the Gateway-exposed tool path is not used; the agent calls `esg-data-tools` directly (the Lambda can become an AgentCore Gateway target later).
+- Glue in isolated subnets with a Secrets Manager endpoint and `JDBC_ENFORCE_SSL` was configured from the documentation and has not been run; check the first Glue run log.

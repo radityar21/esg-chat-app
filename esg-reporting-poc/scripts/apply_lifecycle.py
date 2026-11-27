@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Adds 14-day expiry rules for operational data in the existing output bucket WITHOUT touching other rules.
 
-Expires: agent-ledger/, executions/, platform-cache/, sections/ history is kept (it belongs to the reports).
+Expires: agent-ledger/, executions/, platform-cache/, etl-reports/, sections/ history is kept (it belongs to the reports).
 Keeps:   generated reports, compliance/ attestations and alerts (state, not telemetry).
 Rules created by this script have IDs starting with "esg-platform-"; re-running replaces only those.
 
@@ -13,7 +13,7 @@ import json
 import boto3
 from botocore.exceptions import ClientError
 
-PREFIXES = ["agent-ledger/", "executions/", "platform-cache/"]
+PREFIXES = ["agent-ledger/", "executions/", "platform-cache/", "etl-reports/"]
 
 
 def main() -> None:

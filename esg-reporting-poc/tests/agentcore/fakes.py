@@ -100,3 +100,18 @@ def _init(self):
 
 
 FakeAws.__init__ = _init
+
+
+# optional hook: finish executions the moment they start (used by the data-sync retry tests)
+_orig_start = FakeAws.sfn_start
+
+
+def _start(self, state_machine_arn, payload, name=None):
+    arn = _orig_start(self, state_machine_arn, payload, name)
+    hook = getattr(self, "on_start", None)
+    if hook:
+        hook(self, arn, state_machine_arn, payload)
+    return arn
+
+
+FakeAws.sfn_start = _start

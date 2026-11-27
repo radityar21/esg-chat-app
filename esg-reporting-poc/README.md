@@ -110,3 +110,4 @@ All resources tagged with:
 - `lambda/_shared/`: model routing, PII guard, usage metering, scenario engine, domain configuration.
 - `infra/stacks/platform_stack.py`: CDK stack for all of the above. Deployment steps: `docs/DEPLOY_PLATFORM.md`.
 - Tests: `python -m pytest tests/agentcore tests/platform_api -q`.
+- Source database: `infra/stacks/network_stack.py`, `database_stack.py`, `data_stack.py`; Glue job `glue_jobs/esg_extract_rds.py` with contracts in `glue_jobs/esg_contracts.py`; Lambdas `lambda/rds_seed`, `lambda/data_tools`.

@@ -131,7 +131,7 @@ export default function Chat() {
             <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-800'}`}>Start a Conversation</h3>
             <p className={`text-sm max-w-sm mx-auto mb-6 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>Ask about ESG frameworks, compliance readiness, scenarios or GHG data, or generate a sustainability report</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {['Generate GRI 305 report for 2024', 'Create a multi-framework report for 2024', 'How ready are we for PSPK?', 'Explain why a section failed validation'].map((suggestion, i) => (
+              {['Generate GRI 305 report for 2024', 'Create a multi-framework report for 2024', 'How ready are we for PSPK?', 'Sync the 2024 data from the database', 'Explain why a section failed validation'].map((suggestion, i) => (
                 <button key={i} onClick={() => setInput(suggestion)}
                   className={`px-4 py-2 rounded-xl text-xs transition-all ${
                     isDark

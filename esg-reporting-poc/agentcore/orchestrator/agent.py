@@ -33,6 +33,11 @@ HOW YOU WORK
 6. Use get_download_link when the user asks for the file.
 7. For questions about readiness, GHG inventory, climate scenarios or AI cost, use the matching platform tool and
    report only numbers the tool returned.
+8. SOURCE DATA. The data comes from a database. To refresh it, use sync_data_from_database (pipeline data_sync): it
+   extracts every table with data-contract checks, retries temporary failures once, and starts the downstream ETL only
+   when every table loaded. Include "Execution ID: <id>" in your reply. If the user is unsure whether data is current or
+   why a sync failed, use inspect_source_database and get_etl_report, then explain: which table, which rule, who must act.
+   Say clearly that a failed contract check never overwrites the last good data.
 
 RULES
 - Never invent numbers, execution IDs, links or results. Only report what tools return.
@@ -148,13 +153,47 @@ def build_agent(service: ToolService, model_id: str | None = None) -> Any:
         return json.dumps(service.platform("scenario", year=reporting_year, whatif=whatif), default=str)
 
     @tool
-    def get_ai_cost_summary(days: int = 30) -> str:
+    def get_ai_cost_summary(days: int = 14) -> str:
         """Token usage and cost by model and subsidiary, with the saving versus running everything on Sonnet.
 
         Args:
             days: Look-back window in days.
         """
         return json.dumps(service.platform("finops_summary", days=days), default=str)
+
+    @tool
+    def sync_data_from_database(reporting_year: int, tables: list[str] | None = None, run_etl: bool = True) -> str:
+        """Extract tables from the source database into the data lake and (optionally) run the downstream ETL.
+
+        Args:
+            reporting_year: Reporting year to sync (2023 or 2024).
+            tables: Subset of energy_consumption, loan_portfolio, hr_metrics, scope3_operational_activity. Omit for all.
+            run_etl: Start the Scope 1/2/3 ETL afterwards if every table loaded.
+        """
+        return json.dumps(service.start("data_sync", reporting_year, tables=tables, run_etl=run_etl), default=str)
+
+    @tool
+    def inspect_source_database(table: str = "", reporting_year: int = 0, preview_rows: int = 0) -> str:
+        """Look at the source database (read-only): tables, row counts per year, or a few rows of one table.
+
+        Args:
+            table: A table name for a preview. Empty lists all tables.
+            reporting_year: Year of the preview rows.
+            preview_rows: Number of rows to preview (max 20). 0 lists tables only.
+        """
+        if table and preview_rows and reporting_year:
+            return json.dumps(service.data_tool("source_preview", table=table, year=reporting_year, limit=preview_rows), default=str)
+        return json.dumps(service.data_tool("source_tables"), default=str)
+
+    @tool
+    def get_etl_report(table: str, reporting_year: int) -> str:
+        """Latest data-contract report of the last extract of a table: rows loaded, blocking problems and warnings.
+
+        Args:
+            table: Source table name.
+            reporting_year: Reporting year.
+        """
+        return json.dumps(service.data_tool("etl_report", table=table, year=reporting_year), default=str)
 
     mid = model_id or os.environ.get("ORCHESTRATOR_MODEL_ID")
     if not mid:
@@ -165,5 +204,6 @@ def build_agent(service: ToolService, model_id: str | None = None) -> Any:
         model=BedrockModel(model_id=mid, temperature=0.1),
         system_prompt=SYSTEM_PROMPT,
         tools=[plan_pipeline, list_capabilities, start_pipeline, get_run_status, explain_run, supervise_run, get_download_link,
-               get_compliance_readiness, get_regulatory_alerts, get_ghg_inventory, run_climate_scenarios, get_ai_cost_summary],
+               get_compliance_readiness, get_regulatory_alerts, get_ghg_inventory, run_climate_scenarios, get_ai_cost_summary,
+               sync_data_from_database, inspect_source_database, get_etl_report],
     )

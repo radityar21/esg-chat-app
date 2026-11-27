@@ -52,7 +52,7 @@ DATA_BUCKETS = ["esg-data-raw", "esg-data-curated", "esg-data-aggregated", "esg-
 IMAGE_EXCLUDE = ["data", "result", "docs", "infra", "cdk.out", "tests", "glue_jobs", "sql", "step_functions", "templates", "prompts",
                  "benchmark_advisory", "scripts", "**/__pycache__", "**/*.pyc", ".git", "*.md", "build", ".pytest_cache", "agent", "config",
                  "lambda/section_gen", "lambda/validation", "lambda/athena_query", "lambda/assembly_doc", "lambda/filter_sections", "lambda/validate_input",
-                 "lambda/dashboard_data", "lambda/history", "lambda/review_handler", "lambda/status_check", "lambda/platform_api", "lambda/agent_trigger"]
+                 "lambda/dashboard_data", "lambda/history", "lambda/review_handler", "lambda/status_check", "lambda/platform_api", "lambda/agent_trigger", "lambda/rds_seed", "lambda/data_tools"]
 
 
 class EsgPlatformStack(Stack):
@@ -63,6 +63,7 @@ class EsgPlatformStack(Stack):
         output_bucket = f"esg-output-reports-{acct}"
         report_sm_arn = f"arn:aws:states:{region}:{acct}:stateMachine:{REPORT_SM_NAME}"
         ghg_sm_arn = f"arn:aws:states:{region}:{acct}:stateMachine:{GHG_SM_NAME}"
+        sync_sm_arn = f"arn:aws:states:{region}:{acct}:stateMachine:ESGDataSyncStateMachine"  # created by EsgDataStack (referenced by name)
         platform_fn_arn = f"arn:aws:lambda:{region}:{acct}:function:{PLATFORM_FN_NAME}"
         bucket_arns = [f"arn:aws:s3:::{b}-{acct}" for b in DATA_BUCKETS]
         bucket_objs = [a + "/*" for a in bucket_arns]
@@ -185,8 +186,9 @@ class EsgPlatformStack(Stack):
         rt_role.add_to_policy(iam.PolicyStatement(actions=["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"], resources=model_arns))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["secretsmanager:GetSecretValue"], resources=[pii_secret.secret_arn]))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["states:StartExecution", "states:DescribeExecution", "states:GetExecutionHistory", "states:StopExecution"],
-                                                  resources=[report_sm_arn, ghg_sm_arn, f"arn:aws:states:{region}:{acct}:execution:{REPORT_SM_NAME}:*", f"arn:aws:states:{region}:{acct}:execution:{GHG_SM_NAME}:*"]))
-        fn_arns = [f"arn:aws:lambda:{region}:{acct}:function:{n}" for n in PIPELINE_LAMBDAS + [PLATFORM_FN_NAME]]
+                                                  resources=[report_sm_arn, ghg_sm_arn, sync_sm_arn, f"arn:aws:states:{region}:{acct}:execution:{REPORT_SM_NAME}:*",
+                                                             f"arn:aws:states:{region}:{acct}:execution:{GHG_SM_NAME}:*", f"arn:aws:states:{region}:{acct}:execution:ESGDataSyncStateMachine:*"]))
+        fn_arns = [f"arn:aws:lambda:{region}:{acct}:function:{n}" for n in PIPELINE_LAMBDAS + [PLATFORM_FN_NAME, "esg-data-tools"]]
         rt_role.add_to_policy(iam.PolicyStatement(actions=["lambda:InvokeFunction"], resources=fn_arns))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["s3:GetObject", "s3:ListBucket"], resources=bucket_arns + bucket_objs))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["s3:PutObject", "s3:DeleteObject"], resources=[f"arn:aws:s3:::{output_bucket}/*"]))
@@ -199,7 +201,7 @@ class EsgPlatformStack(Stack):
             network_configuration=agentcore.CfnRuntime.NetworkConfigurationProperty(network_mode="PUBLIC"),
             environment_variables={
                 "AWS_REGION": region, "AWS_ACCOUNT_ID": acct, "REPORT_STATE_MACHINE_ARN": report_sm_arn, "GHG_STATE_MACHINE_ARN": ghg_sm_arn,
-                "OUTPUT_BUCKET": output_bucket, "PLATFORM_FUNCTION": PLATFORM_FN_NAME, "KB_ID": "WVREXI1LEI", "BANK_ID": "GENERIC_FI_001",
+                "SYNC_STATE_MACHINE_ARN": sync_sm_arn, "DATA_TOOLS_FUNCTION": "esg-data-tools", "OUTPUT_BUCKET": output_bucket, "PLATFORM_FUNCTION": PLATFORM_FN_NAME, "KB_ID": "WVREXI1LEI", "BANK_ID": "GENERIC_FI_001",
                 "MAX_CORRECTION_ATTEMPTS": "4", "SECTION_BUDGET_USD": "0.40", "RUN_BUDGET_USD": "1.50", "AGENT_MEMORY_TABLE": memory.table_name, "MAX_PIPELINE_RESTARTS": "1", "MODEL_ROUTING_PROFILE": routing_profile, "USAGE_TABLE": usage.table_name,
                 "VALIDATOR_CALIBRATION": "on", "PII_TOKEN_SECRET_ARN": pii_secret.secret_arn, "PII_REQUIRE_SECRET": "1", "USAGE_TTL_DAYS": "14"})
         # AgentCore creates this group on first use without retention; creating it first applies the 14-day policy

@@ -16,6 +16,7 @@ from typing import Any
 
 from .config import Settings
 
+SYNC_TABLES = ("energy_consumption", "loan_portfolio", "hr_metrics", "scope3_operational_activity")
 FRAMEWORKS = ("GRI_305", "IFRS_S2", "CSRD_ESRS_E1", "OJK_PSPK", "MULTI_FRAMEWORK")
 
 SECTION_TEMPLATES: dict[str, list[dict[str, str]]] = {
@@ -41,6 +42,13 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "eta_minutes": {"single": "10-20", "multi": "20-40"},
         "params": ["reporting_year", "framework", "revenue_idr_billion"],
     },
+    "data_sync": {
+        "title": "Data sync from the source database",
+        "description": "Extracts the source tables (loans, energy, HR, operational Scope 3) from the database into the raw zone with data-contract checks, "
+                       "retries temporary failures, explains contract violations, and starts the downstream ETL only when every table loaded.",
+        "eta_minutes": {"single": "5-15", "multi": "5-15"},
+        "params": ["reporting_year"],
+    },
     "ghg_inventory": {
         "title": "GHG inventory (GHG Protocol template)",
         "description": "Runs Scope 1/2/3 ETL and builds the inventory structured as GHG Protocol Parts 1-6.",
@@ -63,6 +71,7 @@ _FW_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("CSRD_ESRS_E1", re.compile(r"\bcsrd\b|\besrs\b", re.I)),
     ("OJK_PSPK", re.compile(r"\bojk\b|\bpspk\b", re.I)),
 ]
+_SYNC_RE = re.compile(r"\b(sync|sinkron\w*|extract|tarik data|refresh data|muat ulang data|load data)\b.*\b(database|db|rds|sumber|source|data)\b|\b(database|rds)\b.*\b(sync|sinkron\w*|extract)\b", re.I)
 _GHG_RE = re.compile(r"\binventory\b|\binventaris\b|\binventori\b|\bghg protocol\b|\bscope ?3 template\b", re.I)
 _REPORT_RE = re.compile(r"\b(report|laporan|generate|buat|bikin|susun|docx|dokumen)\b", re.I)
 _YEAR_RE = re.compile(r"\b(20\d\d)\b")
@@ -83,7 +92,9 @@ def plan_request(text: str, settings: Settings) -> dict[str, Any]:
         framework = frameworks[0]
 
     # An explicit framework (or "report") means a full report; inventory wording alone means the GHG inventory pipeline.
-    if framework:
+    if _SYNC_RE.search(t) and not framework:
+        pipeline = "data_sync"
+    elif framework:
         pipeline = "esg_report"
     elif _GHG_RE.search(t):
         pipeline = "ghg_inventory"
@@ -151,11 +162,18 @@ def build_input(pipeline: str, params: dict[str, Any], settings: Settings) -> di
         }
     if pipeline == "ghg_inventory":
         return {"reporting_year": year, "bank_id": settings.bank_id}
+    if pipeline == "data_sync":
+        tables = list(params.get("tables") or SYNC_TABLES)
+        bad = [x for x in tables if x not in SYNC_TABLES]
+        if bad:
+            raise ValueError(f"Unknown table(s) {bad}. Choose from {list(SYNC_TABLES)}.")
+        return {"reporting_year": year, "tables": tables, "run_etl": bool(params.get("run_etl", True))}
     raise ValueError(f"Unknown pipeline {pipeline!r}")
 
 
 def state_machine_for(pipeline: str, settings: Settings) -> str:
-    arn = settings.report_state_machine_arn if pipeline == "esg_report" else settings.ghg_state_machine_arn
+    arn = {"esg_report": settings.report_state_machine_arn, "ghg_inventory": settings.ghg_state_machine_arn,
+           "data_sync": settings.sync_state_machine_arn}.get(pipeline, "")
     if not arn:
-        raise RuntimeError(f"State machine for pipeline {pipeline!r} is not configured (set GHG_STATE_MACHINE_ARN).")
+        raise RuntimeError(f"State machine for pipeline {pipeline!r} is not configured (set GHG_STATE_MACHINE_ARN / SYNC_STATE_MACHINE_ARN).")
     return arn

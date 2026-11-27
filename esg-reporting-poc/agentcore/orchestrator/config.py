@@ -28,6 +28,8 @@ class Settings:
     report_state_machine_arn: str = field(default_factory=lambda: os.environ.get(
         "REPORT_STATE_MACHINE_ARN", "arn:aws:states:us-east-1:061039769766:stateMachine:ESGReportGenerationStateMachine"))
     ghg_state_machine_arn: str = field(default_factory=lambda: os.environ.get("GHG_STATE_MACHINE_ARN", ""))
+    sync_state_machine_arn: str = field(default_factory=lambda: os.environ.get("SYNC_STATE_MACHINE_ARN", ""))
+    data_tools_function: str = field(default_factory=lambda: os.environ.get("DATA_TOOLS_FUNCTION", "esg-data-tools"))
     section_gen_function: str = field(default_factory=lambda: os.environ.get("SECTION_GEN_FUNCTION", "esg-section-gen"))
     validation_function: str = field(default_factory=lambda: os.environ.get("VALIDATION_FUNCTION", "esg-validation"))
     assembly_function: str = field(default_factory=lambda: os.environ.get("ASSEMBLY_FUNCTION", "esg-assembly-doc"))

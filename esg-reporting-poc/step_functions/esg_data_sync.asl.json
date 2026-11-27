@@ -1,0 +1,50 @@
+{
+  "Comment": "ESG data sync: extract tables from the source database (RDS) into the raw zone, in parallel, one Glue run per table. A failed table never fails the whole execution: the AgentCore orchestrator reads the per-table results and decides what to do.",
+  "StartAt": "SyncTables",
+  "States": {
+    "SyncTables": {
+      "Type": "Map",
+      "ItemsPath": "$.tables",
+      "MaxConcurrency": 2,
+      "ItemSelector": {
+        "table.$": "$$.Map.Item.Value",
+        "reporting_year.$": "$.reporting_year",
+        "run_id.$": "$$.Execution.Name"
+      },
+      "ItemProcessor": {
+        "ProcessorConfig": { "Mode": "INLINE" },
+        "StartAt": "Extract",
+        "States": {
+          "Extract": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+            "Parameters": {
+              "JobName": "esg-extract-rds",
+              "Arguments": {
+                "--TABLE.$": "$.table",
+                "--REPORTING_YEAR.$": "States.Format('{}', $.reporting_year)",
+                "--RUN_ID.$": "$.run_id"
+              }
+            },
+            "ResultPath": "$.glue",
+            "Catch": [{ "ErrorEquals": ["States.ALL"], "ResultPath": "$.failure", "Next": "Failed" }],
+            "Next": "Ok"
+          },
+          "Ok": { "Type": "Pass", "Parameters": { "table.$": "$.table", "status": "OK" }, "End": true },
+          "Failed": {
+            "Type": "Pass",
+            "Parameters": { "table.$": "$.table", "status": "FAILED", "error.$": "$.failure.Error", "cause.$": "$.failure.Cause" },
+            "End": true
+          }
+        }
+      },
+      "ResultPath": "$.results",
+      "Next": "Done"
+    },
+    "Done": {
+      "Type": "Pass",
+      "Parameters": { "reporting_year.$": "$.reporting_year", "run_id.$": "$$.Execution.Name", "results.$": "$.results" },
+      "End": true
+    }
+  }
+}

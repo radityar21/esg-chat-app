@@ -17,6 +17,12 @@ const EV = {
   reassembled: { icon: FileText, color: 'text-esg-green' },
   completed: { icon: CheckCircle2, color: 'text-esg-green' },
   escalated: { icon: AlertTriangle, color: 'text-esg-amber' },
+  repair_stopped: { icon: AlertTriangle, color: 'text-esg-amber' },
+  sync_retry: { icon: RotateCcw, color: 'text-esg-amber' },
+  sync_table_failed: { icon: XCircle, color: 'text-esg-red' },
+  sync_loaded: { icon: CheckCircle2, color: 'text-esg-green' },
+  etl_started: { icon: Play, color: 'text-accent-blue' },
+  etl_finished: { icon: CheckCircle2, color: 'text-esg-green' },
 }
 const TONE = { completed: 'green', running: 'blue', escalated: 'amber', failed: 'red', pending: 'slate' }
 const NOTE = { info: { tone: 'border-esg-green/25 bg-esg-green/[0.05]', label: 'Repaired', c: 'text-esg-green' }, review: { tone: 'border-esg-amber/30 bg-esg-amber/[0.06]', label: 'Needs review', c: 'text-esg-amber' }, action: { tone: 'border-esg-red/30 bg-esg-red/[0.06]', label: 'Action needed', c: 'text-esg-red' } }

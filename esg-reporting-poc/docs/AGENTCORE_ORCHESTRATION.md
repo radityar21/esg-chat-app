@@ -54,6 +54,26 @@ and the repair spend. The UI shows them under "Review notes" in the agent timeli
 Each step is an event in the ledger (`agent-ledger/<id>.json`). A lock object (`If-None-Match`) prevents two supervisors
 from working on one run. Not included: retrieving extra knowledge-base context as a strategy.
 
+## Data sync from the source database (`datasync.py`)
+`data_sync` is a third pipeline: RDS PostgreSQL → Glue JDBC job `esg-extract-rds` (one run per table, two in parallel) →
+S3 raw zone (same layout as the Athena tables) → the existing ETL. The Glue job checks a data contract
+(`glue_jobs/esg_contracts.py`) BEFORE it writes: a blocking violation (missing column, wrong type, no rows, null or duplicate keys)
+fails the job and the raw zone keeps the last good data; warnings (out-of-range values, unexpected categories) are loaded and reported.
+The agent then decides:
+
+| Situation | Decision |
+|---|---|
+| Table loaded, no warnings | Note "loaded N rows" |
+| Table loaded with warnings | Keep the data, note asks the data owner to confirm |
+| Failure looks temporary (timeout, connection, throttling) | Retry only that table, once |
+| Contract violation | Escalate with the rule, the column and a concrete suggestion; never regenerate or overwrite |
+| Access problem or unknown error | Escalate with the first lines of the cause |
+| Every table loaded | Start the downstream ETL (GHG inventory pipeline) and wait for it |
+| Any table not loaded | Do not start the ETL (no mixing fresh and stale tables) |
+
+Read-only tools for the agent live in `esg-data-tools` (inside the VPC, SELECT-only database user): list tables with
+row counts per year, preview up to 20 rows, read the latest contract report.
+
 ## Validator calibration (`VALIDATOR_CALIBRATION`, default `on`)
 `docs/VALIDATION_FALSE_POSITIVES.md` documents that the numeric rules flagged correct numbers (derived percentages,
 column totals, nested values). Looping on those false positives would burn tokens and degrade text. With calibration on:

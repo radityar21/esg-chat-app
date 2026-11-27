@@ -31,6 +31,7 @@ from typing import Any, Callable
 
 from .aws import AwsGateway, iso, short_id
 from .config import Settings
+from .datasync import DataSyncMixin
 from .diagnose import diagnose
 from .strategies import CANDIDATES, STRATEGIES, build_correction, categorize, choose, cost_usd, memory_key, sanitize_hint
 from .ledger import Ledger
@@ -41,7 +42,7 @@ TERMINAL = {"SUCCEEDED", "FAILED", "TIMED_OUT", "ABORTED"}
 GOOD = {"PASS", "WARN"}
 
 
-class SelfHealingSupervisor:
+class SelfHealingSupervisor(DataSyncMixin):
     def __init__(self, aws: AwsGateway, settings: Settings, sleep: Callable[[float], None] = time.sleep) -> None:
         self.aws = aws
         self.s = settings
@@ -103,6 +104,8 @@ class SelfHealingSupervisor:
 
         if pipeline == "esg_report" and doc.get("auto_heal", True):
             return self._heal_report(arn, doc, d)
+        if pipeline == "data_sync":
+            return self._handle_sync(arn, doc, d)
 
         doc["status"] = "completed"
         result = {"pipeline": pipeline, "output": d.get("output")}
@@ -413,4 +416,6 @@ class SelfHealingSupervisor:
 
     def _pipeline_from(self, d: dict[str, Any]) -> str:
         arn = d.get("stateMachineArn") or ""
+        if self.s.sync_state_machine_arn and arn == self.s.sync_state_machine_arn:
+            return "data_sync"
         return "ghg_inventory" if self.s.ghg_state_machine_arn and arn == self.s.ghg_state_machine_arn else "esg_report"
