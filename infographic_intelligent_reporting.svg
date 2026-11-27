@@ -1,0 +1,227 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1800" font-family="Inter, -apple-system, sans-serif">
+  <defs>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0F172A"/>
+      <stop offset="100%" style="stop-color:#1B3A6B"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4F8CF7"/>
+      <stop offset="100%" style="stop-color:#06D6A0"/>
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F8FAFC"/>
+      <stop offset="100%" style="stop-color:#EFF6FF"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.1"/>
+    </filter>
+    <filter id="shadowSm" x="-3%" y="-3%" width="106%" height="106%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="1800" fill="#FFFFFF"/>
+
+  <!-- Header -->
+  <rect width="1200" height="220" fill="url(#headerGrad)" rx="0"/>
+  <text x="600" y="80" text-anchor="middle" fill="#FFFFFF" font-size="38" font-weight="800">Intelligent Report Generation</text>
+  <text x="600" y="120" text-anchor="middle" fill="#94A3B8" font-size="16">How It Works — From Your Data to a Finished Document in Minutes</text>
+  
+  <!-- KPI strip -->
+  <rect x="100" y="150" width="230" height="55" rx="12" fill="rgba(255,255,255,0.08)"/>
+  <text x="215" y="175" text-anchor="middle" fill="#06D6A0" font-size="22" font-weight="700">&lt; 5 min</text>
+  <text x="215" y="195" text-anchor="middle" fill="#94A3B8" font-size="11">Per Report</text>
+  
+  <rect x="360" y="150" width="230" height="55" rx="12" fill="rgba(255,255,255,0.08)"/>
+  <text x="475" y="175" text-anchor="middle" fill="#4F8CF7" font-size="22" font-weight="700">99.9%</text>
+  <text x="475" y="195" text-anchor="middle" fill="#94A3B8" font-size="11">Data Accuracy</text>
+  
+  <rect x="620" y="150" width="230" height="55" rx="12" fill="rgba(255,255,255,0.08)"/>
+  <text x="735" y="175" text-anchor="middle" fill="#FBBF24" font-size="22" font-weight="700">99%</text>
+  <text x="735" y="195" text-anchor="middle" fill="#94A3B8" font-size="11">Cost Reduction</text>
+  
+  <rect x="880" y="150" width="230" height="55" rx="12" fill="rgba(255,255,255,0.08)"/>
+  <text x="995" y="175" text-anchor="middle" fill="#7C5CFC" font-size="22" font-weight="700">421%</text>
+  <text x="995" y="195" text-anchor="middle" fill="#94A3B8" font-size="11">3-Year ROI*</text>
+
+  <!-- Section: The Flow -->
+  <text x="600" y="280" text-anchor="middle" fill="#1B3A6B" font-size="24" font-weight="700">The Process — 6 Automated Steps</text>
+  <text x="600" y="305" text-anchor="middle" fill="#64748B" font-size="13">User asks in plain language → AI does the rest → Download ready document</text>
+
+  <!-- Step 1: User Request -->
+  <rect x="80" y="340" width="320" height="160" rx="20" fill="url(#cardGrad)" filter="url(#shadow)" stroke="#E2E8F0" stroke-width="1"/>
+  <circle cx="130" cy="385" r="22" fill="#4F8CF7"/>
+  <text x="130" y="392" text-anchor="middle" fill="#FFF" font-size="14" font-weight="700">1</text>
+  <text x="165" y="391" fill="#1B3A6B" font-size="15" font-weight="700">User Request</text>
+  <text x="100" y="425" fill="#64748B" font-size="12">💬 User types in natural language:</text>
+  <rect x="100" y="440" width="280" height="40" rx="10" fill="#EFF6FF" stroke="#4F8CF7" stroke-width="1" stroke-dasharray="4"/>
+  <text x="115" y="465" fill="#4F8CF7" font-size="11" font-style="italic">"Generate our ESG report for 2024"</text>
+  <text x="100" y="490" fill="#94A3B8" font-size="10">No training needed • Any report type • Any language</text>
+
+  <!-- Arrow 1→2 -->
+  <path d="M 400 420 L 440 420" stroke="#4F8CF7" stroke-width="3" fill="none" marker-end="url(#arrowBlue)"/>
+  <defs><marker id="arrowBlue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#4F8CF7"/></marker></defs>
+
+  <!-- Step 2: Validate -->
+  <rect x="450" y="340" width="300" height="160" rx="20" fill="url(#cardGrad)" filter="url(#shadow)" stroke="#E2E8F0" stroke-width="1"/>
+  <circle cx="500" cy="385" r="22" fill="#06D6A0"/>
+  <text x="500" y="392" text-anchor="middle" fill="#FFF" font-size="14" font-weight="700">2</text>
+  <text x="535" y="391" fill="#1B3A6B" font-size="15" font-weight="700">Validate &amp; Plan</text>
+  <text x="470" y="425" fill="#64748B" font-size="12">✅ Checks parameters are valid</text>
+  <text x="470" y="448" fill="#64748B" font-size="12">📋 Identifies required sections</text>
+  <text x="470" y="471" fill="#64748B" font-size="12">🔗 Maps to data sources</text>
+  <text x="470" y="494" fill="#94A3B8" font-size="10">Prevents bad requests from wasting resources</text>
+
+  <!-- Arrow 2→3 -->
+  <path d="M 750 420 L 790 420" stroke="#06D6A0" stroke-width="3" fill="none" marker-end="url(#arrowGreen)"/>
+  <defs><marker id="arrowGreen" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#06D6A0"/></marker></defs>
+
+  <!-- Step 3: Gather Data -->
+  <rect x="800" y="340" width="320" height="160" rx="20" fill="url(#cardGrad)" filter="url(#shadow)" stroke="#E2E8F0" stroke-width="1"/>
+  <circle cx="850" cy="385" r="22" fill="#FBBF24"/>
+  <text x="850" y="392" text-anchor="middle" fill="#FFF" font-size="14" font-weight="700">3</text>
+  <text x="885" y="391" fill="#1B3A6B" font-size="15" font-weight="700">Gather Data</text>
+  <text x="820" y="425" fill="#64748B" font-size="12">🗄️ Queries your data warehouse</text>
+  <text x="820" y="448" fill="#64748B" font-size="12">📊 Pulls numbers from source systems</text>
+  <text x="820" y="471" fill="#64748B" font-size="12">🔢 Pre-computes calculations</text>
+  <text x="820" y="494" fill="#94A3B8" font-size="10">Single source of truth • No manual extraction</text>
+
+  <!-- Connector down -->
+  <path d="M 960 500 L 960 540 L 600 540 L 600 570" stroke="#CBD5E1" stroke-width="2" fill="none" stroke-dasharray="6"/>
+
+  <!-- Step 4: AI Generate -->
+  <rect x="80" y="580" width="350" height="180" rx="20" fill="url(#cardGrad)" filter="url(#shadow)" stroke="#E2E8F0" stroke-width="1"/>
+  <circle cx="130" cy="625" r="22" fill="#7C5CFC"/>
+  <text x="130" y="632" text-anchor="middle" fill="#FFF" font-size="14" font-weight="700">4</text>
+  <text x="165" y="631" fill="#1B3A6B" font-size="15" font-weight="700">AI Generates Content</text>
+  <text x="100" y="665" fill="#64748B" font-size="12">🧠 AI writes each section individually</text>
+  <text x="100" y="688" fill="#64748B" font-size="12">📚 References your policy documents (RAG)</text>
+  <text x="100" y="711" fill="#64748B" font-size="12">📝 Uses your approved templates</text>
+  <text x="100" y="734" fill="#64748B" font-size="12">🔄 Multiple sections in parallel</text>
+  <rect x="100" y="745" width="310" height="5" rx="2" fill="#EFF6FF"/>
+  <rect x="100" y="745" width="220" height="5" rx="2" fill="url(#blueGrad)"/>
+
+  <!-- Arrow 4→5 -->
+  <path d="M 430 670 L 470 670" stroke="#7C5CFC" stroke-width="3" fill="none" marker-end="url(#arrowPurple)"/>
+  <defs><marker id="arrowPurple" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#7C5CFC"/></marker></defs>
+
+  <!-- Step 5: Quality Check -->
+  <rect x="480" y="580" width="300" height="180" rx="20" fill="url(#cardGrad)" filter="url(#shadow)" stroke="#E2E8F0" stroke-width="1"/>
+  <circle cx="530" cy="625" r="22" fill="#EF4444"/>
+  <text x="530" y="632" text-anchor="middle" fill="#FFF" font-size="14" font-weight="700">5</text>
+  <text x="565" y="631" fill="#1B3A6B" font-size="15" font-weight="700">Quality Check</text>
+  <text x="500" y="665" fill="#64748B" font-size="12">🔍 21 automated validation rules</text>
+  <text x="500" y="688" fill="#64748B" font-size="12">🔢 Every number verified vs source</text>
+  <text x="500" y="711" fill="#64748B" font-size="12">🚫 Blocks fabricated content</text>
+  <text x="500" y="734" fill="#64748B" font-size="12">🔄 Auto-retries if issues found</text>
+  <rect x="500" y="748" width="100" height="4" rx="2" fill="#06D6A0"/>
+  <text x="610" y="752" fill="#06D6A0" font-size="9" font-weight="600">PASS</text>
+
+  <!-- Arrow 5→6 -->
+  <path d="M 780 670 L 820 670" stroke="#EF4444" stroke-width="3" fill="none" marker-end="url(#arrowRed)"/>
+  <defs><marker id="arrowRed" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#EF4444"/></marker></defs>
+
+  <!-- Step 6: Assemble & Deliver -->
+  <rect x="830" y="580" width="290" height="180" rx="20" fill="url(#cardGrad)" filter="url(#shadow)" stroke="#E2E8F0" stroke-width="1"/>
+  <circle cx="880" cy="625" r="22" fill="#06D6A0"/>
+  <text x="880" y="632" text-anchor="middle" fill="#FFF" font-size="14" font-weight="700">6</text>
+  <text x="915" y="631" fill="#1B3A6B" font-size="15" font-weight="700">Assemble &amp; Deliver</text>
+  <text x="850" y="665" fill="#64748B" font-size="12">📄 Branded Word document</text>
+  <text x="850" y="688" fill="#64748B" font-size="12">📑 Table of contents, headers</text>
+  <text x="850" y="711" fill="#64748B" font-size="12">🔒 Encrypted download link</text>
+  <text x="850" y="734" fill="#64748B" font-size="12">📥 Ready for review or submission</text>
+
+  <!-- Result Box -->
+  <rect x="80" y="810" width="1040" height="80" rx="16" fill="#ECFDF5" stroke="#06D6A0" stroke-width="2"/>
+  <text x="600" y="845" text-anchor="middle" fill="#064E3B" font-size="16" font-weight="700">✅ Result: Professional, validated document delivered to your inbox</text>
+  <text x="600" y="870" text-anchor="middle" fill="#06D6A0" font-size="13">Total time: under 5 minutes • Zero manual work • Full audit trail</text>
+
+  <!-- Section: What You Get -->
+  <text x="600" y="950" text-anchor="middle" fill="#1B3A6B" font-size="24" font-weight="700">What You Get</text>
+
+  <!-- 4 output cards -->
+  <rect x="80" y="980" width="250" height="130" rx="16" fill="#F8FAFC" filter="url(#shadowSm)" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="205" y="1015" text-anchor="middle" font-size="28">📄</text>
+  <text x="205" y="1045" text-anchor="middle" fill="#1B3A6B" font-size="13" font-weight="700">Formatted Report</text>
+  <text x="205" y="1068" text-anchor="middle" fill="#64748B" font-size="11">DOCX with branding,</text>
+  <text x="205" y="1085" text-anchor="middle" fill="#64748B" font-size="11">TOC, and data tables</text>
+
+  <rect x="360" y="980" width="250" height="130" rx="16" fill="#F8FAFC" filter="url(#shadowSm)" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="485" y="1015" text-anchor="middle" font-size="28">📊</text>
+  <text x="485" y="1045" text-anchor="middle" fill="#1B3A6B" font-size="13" font-weight="700">Live Dashboard</text>
+  <text x="485" y="1068" text-anchor="middle" fill="#64748B" font-size="11">14 charts, 6 KPIs,</text>
+  <text x="485" y="1085" text-anchor="middle" fill="#64748B" font-size="11">real-time visibility</text>
+
+  <rect x="640" y="980" width="250" height="130" rx="16" fill="#F8FAFC" filter="url(#shadowSm)" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="765" y="1015" text-anchor="middle" font-size="28">✅</text>
+  <text x="765" y="1045" text-anchor="middle" fill="#1B3A6B" font-size="13" font-weight="700">Validation Report</text>
+  <text x="765" y="1068" text-anchor="middle" fill="#64748B" font-size="11">Every number verified,</text>
+  <text x="765" y="1085" text-anchor="middle" fill="#64748B" font-size="11">full audit trail</text>
+
+  <rect x="920" y="980" width="200" height="130" rx="16" fill="#F8FAFC" filter="url(#shadowSm)" stroke="#E2E8F0" stroke-width="1"/>
+  <text x="1020" y="1015" text-anchor="middle" font-size="28">🔄</text>
+  <text x="1020" y="1045" text-anchor="middle" fill="#1B3A6B" font-size="13" font-weight="700">Multi-Format</text>
+  <text x="1020" y="1068" text-anchor="middle" fill="#64748B" font-size="11">Same data → multiple</text>
+  <text x="1020" y="1085" text-anchor="middle" fill="#64748B" font-size="11">standards simultaneously</text>
+
+  <!-- Section: Applies To -->
+  <text x="600" y="1180" text-anchor="middle" fill="#1B3A6B" font-size="24" font-weight="700">Applies to Any Industry</text>
+  <text x="600" y="1210" text-anchor="middle" fill="#64748B" font-size="13">Same platform, different templates — unlimited report types</text>
+
+  <!-- Industry icons grid -->
+  <rect x="80" y="1240" width="170" height="90" rx="14" fill="#EFF6FF" stroke="#4F8CF7" stroke-width="1"/>
+  <text x="165" y="1275" text-anchor="middle" font-size="24">🏦</text>
+  <text x="165" y="1300" text-anchor="middle" fill="#1B3A6B" font-size="11" font-weight="600">Banking</text>
+  <text x="165" y="1317" text-anchor="middle" fill="#64748B" font-size="9">ESG, Regulatory, Credit</text>
+
+  <rect x="270" y="1240" width="170" height="90" rx="14" fill="#FFF7ED" stroke="#FBBF24" stroke-width="1"/>
+  <text x="355" y="1275" text-anchor="middle" font-size="24">⚖️</text>
+  <text x="355" y="1300" text-anchor="middle" fill="#1B3A6B" font-size="11" font-weight="600">Legal</text>
+  <text x="355" y="1317" text-anchor="middle" fill="#64748B" font-size="9">Audit, Contracts, Compliance</text>
+
+  <rect x="460" y="1240" width="170" height="90" rx="14" fill="#ECFDF5" stroke="#06D6A0" stroke-width="1"/>
+  <text x="545" y="1275" text-anchor="middle" font-size="24">🏥</text>
+  <text x="545" y="1300" text-anchor="middle" fill="#1B3A6B" font-size="11" font-weight="600">Healthcare</text>
+  <text x="545" y="1317" text-anchor="middle" fill="#64748B" font-size="9">Clinical summaries</text>
+
+  <rect x="650" y="1240" width="170" height="90" rx="14" fill="#F5F3FF" stroke="#7C5CFC" stroke-width="1"/>
+  <text x="735" y="1275" text-anchor="middle" font-size="24">🏗️</text>
+  <text x="735" y="1300" text-anchor="middle" fill="#1B3A6B" font-size="11" font-weight="600">Construction</text>
+  <text x="735" y="1317" text-anchor="middle" fill="#64748B" font-size="9">Project progress reports</text>
+
+  <rect x="840" y="1240" width="170" height="90" rx="14" fill="#FEF2F2" stroke="#EF4444" stroke-width="1"/>
+  <text x="925" y="1275" text-anchor="middle" font-size="24">🏭</text>
+  <text x="925" y="1300" text-anchor="middle" fill="#1B3A6B" font-size="11" font-weight="600">Manufacturing</text>
+  <text x="925" y="1317" text-anchor="middle" fill="#64748B" font-size="9">ISO quality reports</text>
+
+  <!-- Bottom: Before/After comparison -->
+  <text x="600" y="1410" text-anchor="middle" fill="#1B3A6B" font-size="24" font-weight="700">Before vs. After</text>
+
+  <!-- Before box -->
+  <rect x="80" y="1440" width="500" height="200" rx="20" fill="#FEF2F2" stroke="#FECACA" stroke-width="2"/>
+  <text x="330" y="1475" text-anchor="middle" fill="#991B1B" font-size="16" font-weight="700">❌ Before (Manual Process)</text>
+  <text x="110" y="1510" fill="#7F1D1D" font-size="13">• 6-8 weeks per report cycle</text>
+  <text x="110" y="1535" fill="#7F1D1D" font-size="13">• 3-5 people dedicated full-time</text>
+  <text x="110" y="1560" fill="#7F1D1D" font-size="13">• $30K-$120K consultant fees</text>
+  <text x="110" y="1585" fill="#7F1D1D" font-size="13">• Manual data copying → errors</text>
+  <text x="110" y="1610" fill="#7F1D1D" font-size="13">• 3-5 revision rounds</text>
+
+  <!-- After box -->
+  <rect x="620" y="1440" width="500" height="200" rx="20" fill="#ECFDF5" stroke="#A7F3D0" stroke-width="2"/>
+  <text x="870" y="1475" text-anchor="middle" fill="#064E3B" font-size="16" font-weight="700">✅ After (This Platform)</text>
+  <text x="650" y="1510" fill="#064E3B" font-size="13">• Under 5 minutes per report</text>
+  <text x="650" y="1535" fill="#064E3B" font-size="13">• Zero staff required (fully automated)</text>
+  <text x="650" y="1560" fill="#064E3B" font-size="13">• ~$200/month infrastructure cost</text>
+  <text x="650" y="1585" fill="#064E3B" font-size="13">• 99.9% accuracy (auto-validated)</text>
+  <text x="650" y="1610" fill="#064E3B" font-size="13">• 1 automated retry, no waiting</text>
+
+  <!-- Arrow between -->
+  <path d="M 580 1540 L 620 1540" stroke="#06D6A0" stroke-width="4" fill="none" marker-end="url(#arrowGreen)"/>
+
+  <!-- Footer -->
+  <rect x="0" y="1700" width="1200" height="100" fill="url(#headerGrad)"/>
+  <text x="600" y="1740" text-anchor="middle" fill="#FFFFFF" font-size="16" font-weight="700">Tokaicom Mitra Indonesia (Tokai Group)</text>
+  <text x="600" y="1768" text-anchor="middle" fill="#94A3B8" font-size="12">Intelligent Report Generation Platform • Built on Amazon Web Services</text>
+  <text x="600" y="1788" text-anchor="middle" fill="#64748B" font-size="9">*421% ROI: IDC/TechTarget, "The Business Value of Amazon Bedrock" (2025)</text>
+</svg>

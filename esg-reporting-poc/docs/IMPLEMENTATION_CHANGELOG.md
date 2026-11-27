@@ -286,3 +286,261 @@ Apply these changes back to `ESG_kiro_Requirement_Spec.md` after full system val
 |------|--------|
 | `esg-chat-app/frontend/index.html` | Added polling logic, indicator UI, download button styling, system notification messages |
 
+
+
+---
+
+## §NEW: W6 — Analytics Dashboard (added 2026-06-15)
+
+| Spec Says | Actual | Reason |
+|-----------|--------|--------|
+| No analytics/visualization in spec | **Full analytics dashboard with 14 charts + 6 KPI cards** | Management/investor presentation requirement |
+| No dashboard data endpoint | **`GET /dashboard-data` Lambda + API Gateway route** | Frontend needs aggregated metrics API |
+| Data always fresh from Athena | **Hybrid S3 cache + on-demand refresh** | Balance between cost and data freshness |
+| Single-page chat UI | **Multi-page React app**: Overview, Analytics, Chat, Reports, Reference | Enhanced UX with navigation |
+| Basic HTML/CSS | **React + Vite + Tailwind CSS + Recharts** | Modern component-based architecture |
+| No deployment automation | **GitHub + Amplify CI/CD** (repo: `radityar21/esg-chat-app`) | Auto-deploy on git push |
+
+### Dashboard Analytics Coverage
+
+**Environmental (E) — 10 charts:**
+1. Emissions by Scope (Pie) — Scope 1/2/3 breakdown
+2. Scope 1 Sources (Pie) — Natural gas vs diesel
+3. Scope 2 Comparison (Bar) — Location vs market-based
+4. Year-over-Year Comparison (Bar) — Current vs prior year
+5. Emission Intensity (Bar) — Per IDR Bn and per FTE
+6. Scope 1 by Facility (Horizontal Bar) — Top 10 emitters
+7. PCAF Financed Emissions (Horizontal Bar) — Top sectors
+8. PCAF Data Quality (Bar) — Score by sector (color-coded)
+9. Portfolio Concentration (Pie) — % by sector
+10. PCAF Score Distribution (Pie) — Good/Medium/Poor tiers
+
+**Social (S) — 4 charts:**
+11. Gender Diversity (Pie) — Female vs male workforce
+12. Female in Management (Ring progress) — % female in mgmt
+13. Training Hours/FTE (Bar) — YoY comparison
+14. Turnover & Hiring (Bar) — Voluntary turnover vs hiring rate
+
+**6 KPI Cards:**
+- Total Emissions (tCO₂e)
+- YoY Change (%)
+- Intensity per IDR Bn (tCO₂e)
+- PCAF Quality Score (1-5)
+- Total FTE
+- Female %
+
+### Lambda: esg-dashboard-data
+
+| Feature | Implementation |
+|---------|----------------|
+| **Endpoint** | `GET /dashboard-data` (optional `?refresh=true`) |
+| **Default behavior** | Read from S3 cache (`esg-data-aggregated-*/dashboard-cache/latest.json`) |
+| **Refresh mode** | Query Athena → update S3 → return fresh data |
+| **Queries** | 5 Athena queries: GHG summary, prior year, PCAF sectors, Scope 1 facilities, HR metrics |
+| **Cache location** | `s3://esg-data-aggregated-{account}/dashboard-cache/latest.json` |
+| **Response structure** | `{reporting_year, last_updated, ghg_summary, prior_year_summary, pcaf_sectors, scope1_facilities, hr_metrics}` |
+| **Cost optimization** | S3 read = $0, Athena refresh = ~$0.01 per request (user-triggered only) |
+| **IAM permissions** | Athena: `StartQueryExecution`, `GetQueryExecution`, `GetQueryResults` |
+
+### Frontend: React App
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Framework** | React 18 + Vite 5 | Fast build, HMR, modern dev experience |
+| **Styling** | Tailwind CSS 3 | Utility-first, dark theme, glassmorphism |
+| **Charts** | Recharts 2.15 | React-native charts library |
+| **Icons** | Lucide React | Modern icon set |
+| **Routing** | Client-side (single-page) | No React Router (simple state-based nav) |
+| **API layer** | `src/api.js` | Centralized fetch functions |
+| **Deployment** | GitHub + Amplify Hosting | Auto-deploy on push to `main` |
+
+### File Structure
+
+```
+esg-chat-app-react/
+├── src/
+│   ├── App.jsx                    # Main app + routing
+│   ├── api.js                     # API client (getDashboardData, sendChat, etc.)
+│   ├── components/
+│   │   └── Sidebar.jsx            # Navigation sidebar
+│   └── pages/
+│       ├── Overview.jsx           # Landing page (stats + recent reports)
+│       ├── Analytics.jsx          # 14 charts + 6 KPIs ⭐ NEW
+│       ├── Chat.jsx               # Bedrock Agent chat
+│       ├── Reports.jsx            # Report history
+│       └── Reference.jsx          # Framework docs
+├── public/
+│   └── _redirects                 # Amplify SPA routing
+├── amplify.yml                    # Build configuration
+├── vite.config.js                 # Vite bundler config
+├── tailwind.config.js             # Tailwind theme (dark navy)
+└── package.json
+```
+
+### Design System
+
+| Element | Specification |
+|---------|--------------|
+| **Theme** | Dark mode (navy #0f172a background) |
+| **Glassmorphism** | `backdrop-blur-xl` with `bg-white/[0.02]` |
+| **Accent colors** | Blue (#4f8cf7), Teal (#06d6a0), Purple (#7c5cfc) |
+| **Typography** | Inter font, 10-12px body, responsive sizing |
+| **Charts** | Custom tooltips (dark theme), rounded bars, gradient fills |
+| **Navigation** | Sidebar with icons (Lucide), active state indicator |
+| **Logo** | "Tokaicom Mitra Indonesia (Tokai Group)" with leaf icon |
+
+### API Gateway Configuration
+
+| Resource | Method | Integration | CORS |
+|----------|--------|-------------|------|
+| `/dashboard-data` | GET | Lambda `esg-dashboard-data` (proxy) | ✅ Enabled |
+| `/dashboard-data` | OPTIONS | MOCK (preflight) | Headers configured |
+
+**CORS Headers:**
+```
+Access-Control-Allow-Origin: *
+Access-Control-Allow-Methods: GET,OPTIONS
+Access-Control-Allow-Headers: Content-Type,X-Amz-Date,Authorization,X-Api-Key
+```
+
+### GitHub Repository
+
+| Info | Value |
+|------|-------|
+| **Repo** | `https://github.com/radityar21/esg-chat-app` |
+| **Branch** | `main` |
+| **Structure** | Monorepo (contains backend folders + `esg-chat-app-react/`) |
+| **.gitignore** | Excludes: `deploy/`, `*.zip`, `node_modules/`, `dist/`, `__pycache__/` |
+| **Build trigger** | Auto-deploy on push to `main` |
+
+### Amplify Deployment
+
+| Setting | Value |
+|---------|-------|
+| **App name** | `esg-reporting-dashboard` |
+| **Branch** | `main` |
+| **Build command** | `cd esg-chat-app-react && npm ci && npm run build` |
+| **Output directory** | `esg-chat-app-react/dist` |
+| **Node version** | 18.x (default) |
+| **Environment** | Production |
+| **URL** | `https://main.{app-id}.amplifyapp.com` |
+
+### Deployment Issues Encountered & Resolved
+
+| Issue | Root Cause | Solution |
+|-------|-----------|----------|
+| 404 on assets after deploy | Amplify not finding `index.html` in root | Added `amplify.yml` at repo root with correct `baseDirectory` |
+| Browser shows white page | Missing `_redirects` file for SPA routing | Added `public/_redirects` with `/* /index.html 200` |
+| Zip upload too large | Pushed `deploy/layer/python/` (150MB) to Git | Added `.gitignore` to exclude deployment artifacts |
+| Build says "No index.html" | Wrong root directory in Amplify config | Updated `amplify.yml`: `baseDirectory: esg-chat-app-react/dist` |
+
+### Data Flow
+
+```
+User clicks "Analytics" 
+  → Frontend: useEffect() → getDashboardData(refresh=false)
+  → API Gateway: GET /dashboard-data
+  → Lambda: esg-dashboard-data
+  → Check S3 cache exists?
+      Yes → Return cached JSON
+      No  → Query Athena (5 queries)
+          → Save to S3
+          → Return fresh JSON
+  → Frontend: Parse JSON → Render 14 charts + 6 KPIs
+  
+User clicks "Refresh from Athena"
+  → Frontend: getDashboardData(refresh=true)
+  → Lambda: Force Athena query (skip cache)
+  → Update S3 cache
+  → Return fresh data
+```
+
+### Performance Metrics
+
+| Metric | Value |
+|--------|-------|
+| **Cold start (cached)** | ~200-500ms (S3 read only) |
+| **Cold start (Athena refresh)** | ~8-15s (5 queries in sequence) |
+| **Bundle size** | 593 KB JS (gzipped: 174 KB) |
+| **First Contentful Paint** | <1s |
+| **Charts render time** | ~100-300ms (after data loaded) |
+
+### Testing Commands
+
+```bash
+# Test API endpoint (cached)
+curl "https://olj4tuggm1.execute-api.us-east-1.amazonaws.com/prod/dashboard-data"
+
+# Test API endpoint (refresh)
+curl "https://olj4tuggm1.execute-api.us-east-1.amazonaws.com/prod/dashboard-data?refresh=true"
+
+# Local development
+cd esg-chat-app-react
+npm install
+npm run dev  # Vite dev server on http://localhost:5173
+
+# Production build
+npm run build  # Output to dist/
+
+# Deploy
+git add .
+git commit -m "feat: update analytics"
+git push origin main  # Amplify auto-deploys
+```
+
+### New Files Added
+
+| File | Purpose |
+|------|---------|
+| `esg-reporting-poc/lambda/dashboard_data/handler.py` | Lambda function for dashboard data API |
+| `esg-chat-app-react/src/pages/Analytics.jsx` | Analytics dashboard page with 14 charts |
+| `esg-chat-app-react/src/api.js` | Added `getDashboardData()` function |
+| `esg-chat-app-react/public/_redirects` | Amplify SPA routing config |
+| `esg-chat-app-react/amplify.yml` | Amplify build configuration |
+| `esg-chat-app-react/.gitignore` | Exclude node_modules, dist |
+| `.gitignore` (root) | Exclude deploy/, *.zip, backup files |
+
+### IAM Permissions Added
+
+**ESGLambdaRole** (for `esg-dashboard-data`):
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "athena:StartQueryExecution",
+    "athena:GetQueryExecution",
+    "athena:GetQueryResults"
+  ],
+  "Resource": "arn:aws:athena:us-east-1:*:workgroup/esg-reporting-workgroup"
+}
+```
+
+### Cost Analysis
+
+| Component | Cost Structure | Estimated Monthly Cost |
+|-----------|---------------|----------------------|
+| **Amplify Hosting** | Build minutes + storage + bandwidth | ~$1-5 (low traffic) |
+| **S3 cache reads** | GET requests + data transfer | ~$0.01 |
+| **Athena queries (cached mode)** | No queries | $0 |
+| **Athena queries (refresh mode)** | $5/TB scanned, ~10MB per refresh | ~$0.0001 per refresh |
+| **API Gateway** | $3.50/million requests | ~$0.01 (low traffic) |
+| **Lambda (dashboard_data)** | $0.20/1M requests + $0.0000166667/GB-sec | ~$0.01 |
+| **Total (typical usage)** | 10 users, 5 refreshes/day | **~$2-6/month** |
+
+---
+
+## Updated Summary Statistics (W6)
+
+| Category | Count |
+|----------|-------|
+| Total spec deviations | 91 |
+| Critical (architecture change) | 7 |
+| High (missing feature, wrong config) | 38 |
+| Medium (naming, precision, minor logic) | 30 |
+| Low (cosmetic, documentation) | 16 |
+| New components added | 24 |
+| Total Lambda functions | 9 |
+| Total S3 buckets | 6 |
+| Total Athena tables | 12 |
+| Total API endpoints | 5 |
+| Frontend pages | 5 |
