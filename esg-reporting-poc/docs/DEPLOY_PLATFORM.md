@@ -6,7 +6,7 @@ Single environment (`prod`) in account `061039769766`, region `us-east-1`. Front
 ## 0. One-time prerequisites (console)
 1. **Bedrock model access** for Claude Sonnet 4.5 and Haiku 4.5 (Bedrock console > Model access).
 2. **CDK bootstrap**: `cdk bootstrap aws://061039769766/us-east-1`.
-3. **Docker Desktop** with buildx/QEMU (the AgentCore image is ARM64).
+3. Docker is NOT required: the agent is deployed as a zip (direct code deployment). Docker Desktop is only needed with `-c agentPackaging=container`.
 4. **Amplify app**: Amplify console > Create app > GitHub > repository `esg-chat-app`, branch `main-agentcore`.
    Install the Amplify GitHub App when asked. Leave the monorepo "app root" empty (the root `amplify.yml` handles it).
    Do not deploy yet; note the app id and the branch URL `https://main-agentcore.<appId>.amplifyapp.com`.
@@ -51,7 +51,9 @@ New-Item -ItemType Directory -Force build\layer\python | Out-Null
 python -m pip install --upgrade --target build\layer\python "boto3>=1.40"
 cd infra; python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
 $APP = "https://main-agentcore.<appId>.amplifyapp.com"        # exact origin from step 0.4
+cd ..; python scripts\build_agent_zip.py; cd infra      # builds build\agent.zip with arm64 dependencies (about 40 MB), no Docker
 cdk deploy EsgPlatformStack --app "python app.py" -c appUrl=$APP    # add -c devOrigin=http://localhost:5173 for local dev
+# container instead of zip:  add  -c agentPackaging=container  (needs Docker Desktop)
 cd ..
 aws cloudformation describe-stacks --stack-name EsgPlatformStack --query "Stacks[0].Outputs" --output table
 ```

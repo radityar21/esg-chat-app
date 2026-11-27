@@ -26,6 +26,7 @@ from aws_cdk import (
     aws_cognito as cognito,
     aws_dynamodb as ddb,
     aws_ecr_assets as ecr_assets,
+    aws_s3_assets as s3_assets,
     aws_events as events,
     aws_events_targets as targets,
     aws_iam as iam,
@@ -57,7 +58,7 @@ IMAGE_EXCLUDE = ["data", "result", "docs", "infra", "cdk.out", "tests", "glue_jo
 
 class EsgPlatformStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, *, app_url: str, dev_origin: str | None = None,
-                 company_name: str = "Bank Nusantara Sejahtera", routing_profile: str = "quality", **kwargs) -> None:
+                 company_name: str = "Bank Nusantara Sejahtera", routing_profile: str = "quality", agent_packaging: str = "zip", **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
         acct, region = self.account, self.region
         output_bucket = f"esg-output-reports-{acct}"
@@ -172,12 +173,25 @@ class EsgPlatformStack(Stack):
                             definition_substitutions={"PlatformFnArn": platform_fn_arn})
 
         # ── AgentCore Runtime ──────────────────────────────────────────────────────────────────────
-        image = ecr_assets.DockerImageAsset(self, "OrchestratorImage", directory=str(POC), file="agentcore/Dockerfile",
-                                            platform=ecr_assets.Platform.LINUX_ARM64, exclude=IMAGE_EXCLUDE)
+        if agent_packaging not in ("zip", "container"):
+            raise ValueError("agent_packaging must be 'zip' (direct code deployment, no Docker) or 'container'")
         rt_role = iam.Role(self, "RuntimeRole", assumed_by=iam.ServicePrincipal(
             "bedrock-agentcore.amazonaws.com", conditions={"StringEquals": {"aws:SourceAccount": acct}, "ArnLike": {"aws:SourceArn": f"arn:aws:bedrock-agentcore:{region}:{acct}:*"}}))
-        image.repository.grant_pull(rt_role)
-        rt_role.add_to_policy(iam.PolicyStatement(actions=["ecr:GetAuthorizationToken"], resources=["*"]))
+        if agent_packaging == "container":
+            image = ecr_assets.DockerImageAsset(self, "OrchestratorImage", directory=str(POC), file="agentcore/Dockerfile",
+                                                platform=ecr_assets.Platform.LINUX_ARM64, exclude=IMAGE_EXCLUDE)
+            image.repository.grant_pull(rt_role)
+            rt_role.add_to_policy(iam.PolicyStatement(actions=["ecr:GetAuthorizationToken"], resources=["*"]))
+            artifact = agentcore.CfnRuntime.AgentRuntimeArtifactProperty(container_configuration=agentcore.CfnRuntime.ContainerConfigurationProperty(container_uri=image.image_uri))
+        else:
+            zip_path = POC / "build" / "agent.zip"
+            if not zip_path.exists():
+                raise RuntimeError("build/agent.zip is missing. Run: python scripts/build_agent_zip.py (no Docker needed), or deploy with -c agentPackaging=container.")
+            code = s3_assets.Asset(self, "OrchestratorCode", path=str(zip_path))
+            code.grant_read(rt_role)
+            artifact = agentcore.CfnRuntime.AgentRuntimeArtifactProperty(code_configuration=agentcore.CfnRuntime.CodeConfigurationProperty(
+                code=agentcore.CfnRuntime.CodeProperty(s3=agentcore.CfnRuntime.S3LocationProperty(bucket=code.s3_bucket_name, prefix=code.s3_object_key)),
+                entry_point=["opentelemetry-instrument", "app.py"], runtime="PYTHON_3_12"))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams", "logs:DescribeLogGroups"],
                                                   resources=[f"arn:aws:logs:{region}:{acct}:log-group:/aws/bedrock-agentcore/runtimes/*", f"arn:aws:logs:{region}:{acct}:log-group:/aws/bedrock-agentcore/runtimes/*:log-stream:*"]))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["xray:PutTraceSegments", "xray:PutTelemetryRecords", "xray:GetSamplingRules", "xray:GetSamplingTargets", "cloudwatch:PutMetricData"], resources=["*"]))
@@ -196,8 +210,7 @@ class EsgPlatformStack(Stack):
 
         runtime = agentcore.CfnRuntime(
             self, "OrchestratorRuntime", agent_runtime_name="esg_orchestrator", description="ESG report orchestrator: routes requests, supervises Step Functions, self-corrects validation failures",
-            role_arn=rt_role.role_arn, agent_runtime_artifact=agentcore.CfnRuntime.AgentRuntimeArtifactProperty(
-                container_configuration=agentcore.CfnRuntime.ContainerConfigurationProperty(container_uri=image.image_uri)),
+            role_arn=rt_role.role_arn, agent_runtime_artifact=artifact,
             network_configuration=agentcore.CfnRuntime.NetworkConfigurationProperty(network_mode="PUBLIC"),
             environment_variables={
                 "AWS_REGION": region, "AWS_ACCOUNT_ID": acct, "REPORT_STATE_MACHINE_ARN": report_sm_arn, "GHG_STATE_MACHINE_ARN": ghg_sm_arn,

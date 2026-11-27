@@ -38,6 +38,7 @@ if _app_url:
         raise SystemExit("appUrl must be an https origin without a path, e.g. https://main-agentcore.d1abc.amplifyapp.com")
     EsgPlatformStack(app, "EsgPlatformStack", env=cdk.Environment(account=app.node.try_get_context("account") or __import__("os").environ.get("CDK_DEFAULT_ACCOUNT"), region="us-east-1"),
                      app_url=str(_app_url), dev_origin=app.node.try_get_context("devOrigin"),
-                     routing_profile=app.node.try_get_context("routingProfile") or "quality")
+                     routing_profile=app.node.try_get_context("routingProfile") or "quality",
+                     agent_packaging=app.node.try_get_context("agentPackaging") or "zip")
 
 app.synth()
