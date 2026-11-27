@@ -9,7 +9,7 @@
 # spend-based (EEIO) or activity-based averages. Everything is SYNTHETIC and for demonstration only.
 #
 # Output: ../data/synthetic/scope3_operational/reporting_year=YYYY/scope3_operational_activity.parquet (+ CSV sample)
-# Upload: s3://esg-data-raw-<account>/scope3_operational_activity/reporting_year=YYYY/
+# Upload: s3://esg-data-raw-<account>/raw/scope3_operational_activity/reporting_year=YYYY/
 # =============================================================================
 
 from __future__ import annotations
