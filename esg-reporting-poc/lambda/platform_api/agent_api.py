@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import uuid
 from typing import Any
 
@@ -27,17 +28,69 @@ def _runtime(payload: dict[str, Any], session_id: str, timeout_note: str = "") -
         return {"response": raw.decode("utf-8", "replace")}
 
 
-def chat(body: dict[str, Any]) -> dict[str, Any]:
+JOBS_TABLE = os.environ.get("CHAT_JOBS_TABLE", "")
+JOB_TTL_DAYS = int(os.environ.get("JOB_TTL_DAYS", "14"))
+SESSION_RE = re.compile(r"^[A-Za-z0-9_\-]{33,100}$")
+
+
+def _jobs():
+    import boto3
+
+    return boto3.resource("dynamodb", region_name=common.REGION).Table(JOBS_TABLE)
+
+
+def _invoke_self(payload: dict[str, Any]) -> None:
+    common.client("lambda").invoke(FunctionName=os.environ["AWS_LAMBDA_FUNCTION_NAME"], InvocationType="Event", Payload=json.dumps(payload).encode())
+
+
+def chat_submit(body: dict[str, Any], jobs: Any = None, invoke: Any = None) -> dict[str, Any]:
+    """Queue a chat turn. The HTTP API cuts requests at 30 s, so the turn runs in a second (asynchronous) invocation
+    and the UI polls ``chat_status``. The prompt is NOT stored: only the answer, for 14 days."""
     prompt = str(body.get("prompt", "")).strip()
     if not prompt:
         raise ValueError("prompt is required")
     if len(prompt) > MAX_PROMPT:
         raise ValueError(f"prompt longer than {MAX_PROMPT} characters")
     sid = str(body.get("session_id") or "")
-    if len(sid) < 33:  # AgentCore requires a session id of at least 33 characters
+    if not SESSION_RE.match(sid):  # AgentCore needs >= 33 characters; never accept arbitrary client strings
         sid = f"esg-{uuid.uuid4().hex}"
-    out = _runtime({"mode": "chat", "prompt": prompt}, sid)
-    out.setdefault("session_id", sid)
+    user = str(body.get("_user") or "anonymous")
+    job_id = uuid.uuid4().hex
+    (jobs or _jobs()).put_item(Item={"job_id": job_id, "user": user, "status": "queued", "session_id": sid, "created_at": int(time.time()),
+                                     "ttl": int(time.time()) + JOB_TTL_DAYS * 86400})
+    (invoke or _invoke_self)({"action": "agent_chat_worker", "job_id": job_id, "prompt": prompt, "session_id": sid})
+    return {"job_id": job_id, "session_id": sid, "status": "queued"}
+
+
+def chat_worker(event: dict[str, Any], jobs: Any = None, runtime: Any = None) -> dict[str, Any]:
+    table = jobs or _jobs()
+    job_id = event["job_id"]
+    table.update_item(Key={"job_id": job_id}, UpdateExpression="SET #s = :s", ExpressionAttributeNames={"#s": "status"}, ExpressionAttributeValues={":s": "running"})
+    try:
+        out = (runtime or _runtime)({"mode": "chat", "prompt": event["prompt"]}, event["session_id"])
+        table.update_item(Key={"job_id": job_id}, UpdateExpression="SET #s = :s, #r = :r", ExpressionAttributeNames={"#s": "status", "#r": "result"},
+                          ExpressionAttributeValues={":s": "done", ":r": json.dumps(out)[:300000]})
+        return {"ok": True}
+    except Exception as exc:  # noqa: BLE001 - the UI shows a short, safe message; details stay in the Lambda log
+        import logging
+
+        logging.getLogger().exception("chat worker failed")
+        table.update_item(Key={"job_id": job_id}, UpdateExpression="SET #s = :s, #e = :e", ExpressionAttributeNames={"#s": "status", "#e": "error"},
+                          ExpressionAttributeValues={":s": "failed", ":e": f"{type(exc).__name__}"})
+        return {"ok": False}
+
+
+def chat_status(job_id: str, user: str, is_admin: bool = False, jobs: Any = None) -> dict[str, Any]:
+    if not re.match(r"^[0-9a-f]{32}$", job_id or ""):
+        raise ValueError("invalid job id")
+    item = (jobs or _jobs()).get_item(Key={"job_id": job_id}).get("Item")
+    if not item or (item["user"] != user and not is_admin):
+        return {"found": False}
+    out: dict[str, Any] = {"found": True, "status": item["status"]}
+    if item["status"] == "done":
+        out["result"] = json.loads(item["result"])
+    if item["status"] == "failed":
+        out["error"] = item.get("error", "failed")
     return out
 
 

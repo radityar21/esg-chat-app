@@ -4,7 +4,7 @@ import { useTheme } from '../ThemeContext'
 import { Send, Bot, User, Loader2, CheckCircle2, AlertCircle, Download, Sparkles } from 'lucide-react'
 import AgentActivity from '../components/AgentActivity'
 import { Pill } from '../components/ui'
-import { api, platformEnabled, CHAT_BASE } from '../lib/platform'
+import { askAgent, platformEnabled } from '../lib/platform'
 
 // AgentCore needs a session id of at least 33 characters. crypto.randomUUID only exists in secure contexts (https), so fall back to getRandomValues.
 function newSessionId() {
@@ -70,7 +70,7 @@ export default function Chat() {
     setLoading(true)
     try {
       const data = platformEnabled
-        ? await api('/agent/chat', { method: 'POST', base: CHAT_BASE, body: { prompt: userMsg, session_id: sessionId }, timeout: 170000 })
+        ? await askAgent(userMsg, sessionId)
         : await sendChat(userMsg, sessionId)
       const reply = data.response || data.message || JSON.stringify(data)
       setMessages(prev => [...prev, { role: 'assistant', text: reply }])

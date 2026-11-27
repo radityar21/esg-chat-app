@@ -3,7 +3,7 @@
 # shared modules flat at the zip root (the handlers import them as top-level modules), merges the new environment variables,
 # and syncs templates (prompts/templates/) and prompts (prompts/) to the KB bucket, and uploads the Scope 3 operational data.
 #
-#   AWS_REGION=us-east-1 ACCOUNT_ID=061039769766 USAGE_TABLE=esg-llm-usage bash scripts/package_lambdas.sh
+#   AWS_REGION=us-east-1 ACCOUNT_ID=061039769766 USAGE_TABLE=esg-llm-usage PII_TOKEN_SECRET_ARN=<PiiSecretArn> bash scripts/package_lambdas.sh
 #   DRY_RUN=1 ... only builds the zips under build/lambda-zips and prints what it would do.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -45,7 +45,8 @@ PY
     aws lambda update-function-configuration --region "$REGION" --function-name "$fn" --environment "$merged" --output text --query LastModified
     aws lambda wait function-updated --region "$REGION" --function-name "$fn"
   }
-  merge_env esg-section-gen "USAGE_TABLE=$USAGE_TABLE" "MODEL_ROUTING_PROFILE=$PROFILE_ROUTING" "PII_TOKEN_SECRET=${PII_TOKEN_SECRET:?set PII_TOKEN_SECRET to a long random string}"
+  merge_env esg-section-gen "USAGE_TABLE=$USAGE_TABLE" "MODEL_ROUTING_PROFILE=$PROFILE_ROUTING" "USAGE_TTL_DAYS=14" \
+    "PII_TOKEN_SECRET_ARN=${PII_TOKEN_SECRET_ARN:?set PII_TOKEN_SECRET_ARN (CDK output PiiSecretArn)}" "PII_REQUIRE_SECRET=1"
   merge_env esg-validation "VALIDATOR_CALIBRATION=on"
 
   aws s3 sync templates "s3://esg-kb-documents-$ACCOUNT_ID/prompts/templates/" --region "$REGION" --exclude "*" --include "*.txt"

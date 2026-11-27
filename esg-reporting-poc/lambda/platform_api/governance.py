@@ -123,9 +123,9 @@ def summarize(items: list[dict[str, Any]], days: int, meta_get: Callable[[str], 
 
 def finops_summary(params: dict[str, Any], table: Any | None = None, meta_get: Callable[[str], Any] | None = None) -> dict[str, Any]:
     try:
-        days = max(1, min(90, int(params.get("days", 30))))
+        days = max(1, min(14, int(params.get("days", 14))))
     except (TypeError, ValueError):
-        raise ValueError("days must be an integer between 1 and 90") from None
+        raise ValueError("days must be an integer between 1 and 14") from None
     if table is None and not os.environ.get("USAGE_TABLE"):
         return {**summarize([], days, meta_get), "warning": "USAGE_TABLE is not configured: metering is off."}
     table = table or _table()

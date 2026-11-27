@@ -10,6 +10,7 @@ import GhgInventory from './pages/GhgInventory'
 import Chat from './pages/Chat'
 import Reports from './pages/Reports'
 import Reference from './pages/Reference'
+import AuthGate from './components/AuthGate'
 
 const ORDER = NAV.flatMap((g) => g.items.map((i) => i.id))
 
@@ -55,7 +56,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <AuthGate>
+        <AppContent />
+      </AuthGate>
     </ThemeProvider>
   )
 }

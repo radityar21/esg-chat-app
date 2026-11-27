@@ -209,29 +209,97 @@ def test_finops_without_table_is_explicit(monkeypatch):
 
 
 # ── Handler ───────────────────────────────────────────────────────────────────────────────────────
-def _http(method, path, body=None, headers=None, qs=None):
-    return {"requestContext": {"http": {"method": method, "path": path}}, "headers": headers or {}, "queryStringParameters": qs,
-            "body": json.dumps(body) if body is not None else None}
+def _http(method, path, body=None, qs=None, groups="[viewer]", sub="user-1", authed=True):
+    claims = {"sub": sub, "cognito:groups": groups} if authed else {}
+    return {"requestContext": {"http": {"method": method, "path": path}, "authorizer": {"jwt": {"claims": claims}} if authed else {}},
+            "queryStringParameters": qs, "body": json.dumps(body) if body is not None else None}
 
 
-def test_handler_routes_and_errors(monkeypatch):
-    assert handler.lambda_handler(_http("GET", "/health"))["statusCode"] == 200
+def test_handler_routes_and_errors():
+    assert handler.lambda_handler(_http("GET", "/health", authed=False))["statusCode"] == 200
     assert handler.lambda_handler(_http("GET", "/nope"))["statusCode"] == 404
     r = handler.lambda_handler(_http("POST", "/governance/pii-mask", {}))
     assert r["statusCode"] == 400 and "error" in json.loads(r["body"])
-    assert handler.lambda_handler(_http("OPTIONS", "/anything"))["statusCode"] == 204
+    assert handler.lambda_handler(_http("OPTIONS", "/anything", authed=False))["statusCode"] == 204
 
 
-def test_handler_api_key(monkeypatch):
-    monkeypatch.setenv("API_KEY", "s3cret")
-    assert handler.lambda_handler(_http("GET", "/portfolio"))["statusCode"] == 401
-    assert handler.lambda_handler(_http("GET", "/portfolio", headers={"X-Api-Key": "wrong"}))["statusCode"] == 401
-    ok = handler.lambda_handler(_http("POST", "/governance/pii-mask", {"text": "hi"}, headers={"X-Api-Key": "s3cret"}))
-    assert ok["statusCode"] == 200
-    assert handler.lambda_handler(_http("GET", "/health"))["statusCode"] == 200  # health is open
+def test_handler_requires_login_and_role():
+    assert handler.lambda_handler(_http("GET", "/portfolio", authed=False))["statusCode"] == 401
+    assert handler.lambda_handler(_http("GET", "/portfolio", groups=""))["statusCode"] == 403
+    assert handler.lambda_handler(_http("POST", "/governance/pii-mask", {"text": "hi"}))["statusCode"] == 200
+
+
+def test_admin_only_routes(monkeypatch):
+    monkeypatch.setattr(handler.agent_api, "_invoke_self", lambda p: None)
+    assert handler.lambda_handler(_http("POST", "/compliance/scan", {}, groups="[viewer]"))["statusCode"] == 403
+    assert handler.lambda_handler(_http("POST", "/compliance/attest", {}, groups="[viewer]"))["statusCode"] == 403
+    r = handler.lambda_handler(_http("POST", "/compliance/scan", {}, groups="[viewer admin]"))
+    assert r["statusCode"] == 200 and json.loads(r["body"]) == {"started": True}
+
+
+def test_client_cannot_inject_internal_fields(monkeypatch):
+    seen = {}
+    monkeypatch.setitem(handler.ACTIONS, "agent_chat", lambda p: seen.update(p) or {})
+    handler.lambda_handler(_http("POST", "/agent/chat", {"prompt": "x", "_user": "someone-else"}, sub="real-user"))
+    assert seen["_user"] == "real-user"
 
 
 def test_handler_direct_invocation_returns_error_object():
     r = handler.lambda_handler({"action": "pii_mask"})
     assert "error" in r
     assert "actions" in handler.lambda_handler({"action": "zzz"})
+
+
+# ── Async chat ────────────────────────────────────────────────────────────────────────────────────
+class FakeJobs:
+    def __init__(self):
+        self.items = {}
+
+    def put_item(self, Item):
+        self.items[Item["job_id"]] = dict(Item)
+
+    def get_item(self, Key):
+        i = self.items.get(Key["job_id"])
+        return {"Item": dict(i)} if i else {}
+
+    def update_item(self, Key, UpdateExpression, ExpressionAttributeValues, ExpressionAttributeNames=None):
+        item = self.items[Key["job_id"]]
+        names = ExpressionAttributeNames or {}
+        for part in UpdateExpression[4:].split(","):
+            k, v = [x.strip() for x in part.split("=")]
+            item[names.get(k, k)] = ExpressionAttributeValues[v]
+
+
+def test_chat_flow_and_ownership():
+    from platform_api import agent_api
+    jobs, calls = FakeJobs(), []
+    r = agent_api.chat_submit({"prompt": "halo", "_user": "u1", "session_id": "short"}, jobs=jobs, invoke=calls.append)
+    assert len(r["session_id"]) >= 33 and calls[0]["action"] == "agent_chat_worker" and "halo" == calls[0]["prompt"]
+    assert "prompt" not in jobs.items[r["job_id"]]  # the prompt is never stored
+    assert agent_api.chat_status(r["job_id"], "u1", jobs=jobs)["status"] == "queued"
+    agent_api.chat_worker(calls[0], jobs=jobs, runtime=lambda p, s: {"response": "ok"})
+    assert agent_api.chat_status(r["job_id"], "u1", jobs=jobs)["result"]["response"] == "ok"
+    assert agent_api.chat_status(r["job_id"], "u2", jobs=jobs) == {"found": False}
+    assert agent_api.chat_status(r["job_id"], "u2", is_admin=True, jobs=jobs)["found"]
+
+
+def test_chat_worker_failure_is_reported_without_details():
+    from platform_api import agent_api
+    jobs = FakeJobs()
+    r = agent_api.chat_submit({"prompt": "x", "_user": "u"}, jobs=jobs, invoke=lambda p: None)
+
+    def boom(p, s):
+        raise RuntimeError("secret internal detail")
+    agent_api.chat_worker({"job_id": r["job_id"], "prompt": "x", "session_id": r["session_id"]}, jobs=jobs, runtime=boom)
+    st = agent_api.chat_status(r["job_id"], "u", jobs=jobs)
+    assert st["status"] == "failed" and "secret" not in json.dumps(st)
+
+
+def test_chat_validation():
+    from platform_api import agent_api
+    with pytest.raises(ValueError):
+        agent_api.chat_submit({"prompt": " "}, jobs=FakeJobs(), invoke=lambda p: None)
+    with pytest.raises(ValueError):
+        agent_api.chat_submit({"prompt": "x" * 5000}, jobs=FakeJobs(), invoke=lambda p: None)
+    with pytest.raises(ValueError):
+        agent_api.chat_status("not-a-job", "u", jobs=FakeJobs())

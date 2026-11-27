@@ -1,62 +1,99 @@
-# Deploying the ESG Intelligence platform
+# Deploying the ESG Intelligence platform (production, PowerShell)
 
-Account `061039769766`, region `us-east-1`. Prerequisites: AWS CLI with admin-level credentials, Python 3.11+,
-Node 18+, AWS CDK CLI v2, Docker with buildx (ARM64 image), Bedrock model access for Claude Sonnet 4.5 and Haiku 4.5,
-CDK bootstrapped (`cdk bootstrap aws://061039769766/us-east-1`).
+Single environment (`prod`) in account `061039769766`, region `us-east-1`. Frontend on Amplify Hosting (GitHub, branch
+`main-agentcore`), backend by CDK. Run commands from `esg-reporting-poc\` unless stated.
 
-All commands run from `esg-reporting-poc/` unless stated.
+## 0. One-time prerequisites (console)
+1. **Bedrock model access** for Claude Sonnet 4.5 and Haiku 4.5 (Bedrock console > Model access).
+2. **CDK bootstrap**: `cdk bootstrap aws://061039769766/us-east-1`.
+3. **Docker Desktop** with buildx/QEMU (the AgentCore image is ARM64).
+4. **Amplify app**: Amplify console > Create app > GitHub > repository `esg-chat-app`, branch `main-agentcore`.
+   Install the Amplify GitHub App when asked. Leave the monorepo "app root" empty (the root `amplify.yml` handles it).
+   Do not deploy yet; note the app id and the branch URL `https://main-agentcore.<appId>.amplifyapp.com`.
 
-## 1. Data: new Scope 3 table
-```bash
-aws s3 sync data/synthetic/scope3_operational s3://esg-data-raw-061039769766/raw/scope3_operational_activity/ --exclude "*.csv"
-# run sql/ddl/05_scope3_operational.sql in Athena (workgroup esg-reporting-workgroup)
+## 1. Data
+```powershell
+$ACCT = "061039769766"; $env:AWS_REGION = "us-east-1"
+aws s3 sync data/synthetic/scope3_operational "s3://esg-data-raw-$ACCT/raw/scope3_operational_activity/" --exclude "*.csv"
+aws athena start-query-execution --work-group esg-reporting-workgroup --query-string (Get-Content sql/ddl/05_scope3_operational.sql -Raw)
 ```
-Without this table the inventory reports Scope 3 categories 1-7 as "not measured" (never as zero).
 
-## 2. Platform stack (API, agent runtime, GHG state machine, usage table)
-```bash
-bash scripts/build_layer.sh                       # recent boto3 layer (bedrock-agentcore client)
-cd infra && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
-cdk deploy EsgPlatformStack -c apiKey="$(openssl rand -hex 24)"   # keep the key
+## 2. Backend stack
+```powershell
+New-Item -ItemType Directory -Force build\layer\python | Out-Null
+python -m pip install --upgrade --target build\layer\python "boto3>=1.40"
+cd infra; python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt
+$APP = "https://main-agentcore.<appId>.amplifyapp.com"        # exact origin from step 0.4
+cdk deploy EsgPlatformStack --app "python app.py" -c appUrl=$APP    # add -c devOrigin=http://localhost:5173 for local dev
+cd ..
+aws cloudformation describe-stacks --stack-name EsgPlatformStack --query "Stacks[0].Outputs" --output table
 ```
-CDK builds the container from `agentcore/Dockerfile` (context `esg-reporting-poc/`, ARM64). Outputs:
-`PlatformApiUrl`, `PlatformFunctionUrl`, `AgentRuntimeArn`, `GhgStateMachineArn`, `UsageTableName`, `UsageMeterPolicyArn`.
-Optional context: `-c allowedOrigin=https://your-app-domain`, `-c routingProfile=balanced|economy`.
+The stack creates: Cognito user pool (admin-created users, optional TOTP MFA), JWT-protected HTTP API, platform and trigger
+Lambdas, usage and chat-job tables (14-day TTL), PII secret, Bedrock guardrail, GHG state machine, AgentCore runtime,
+EventBridge rules and a dead-letter queue.
 
-## 3. Update the existing pipeline Lambdas
-```bash
-PII_TOKEN_SECRET="$(openssl rand -hex 32)" USAGE_TABLE=esg-llm-usage bash scripts/package_lambdas.sh
+## 3. Existing pipeline Lambdas, policies, lifecycle
+```powershell
+$o = aws cloudformation describe-stacks --stack-name EsgPlatformStack --query "Stacks[0].Outputs" | ConvertFrom-Json
+$secret = ($o | ? OutputKey -eq PiiSecretArn).OutputValue
+$policy = ($o | ? OutputKey -eq PipelineExtrasPolicyArn).OutputValue
+$env:PII_TOKEN_SECRET_ARN = $secret; $env:USAGE_TABLE = "esg-llm-usage"
+wsl bash scripts/package_lambdas.sh          # updates the 4 Lambdas, merges env vars, syncs templates/prompts/data
+$role = (aws lambda get-function-configuration --function-name esg-section-gen --query Role --output text).Split('/')[-1]
+aws iam attach-role-policy --role-name $role --policy-arn $policy
+python scripts/apply_lifecycle.py            # 14-day expiry for ledger, executions, cache (keeps existing rules)
 ```
-This updates `esg-section-gen`, `esg-validation`, `esg-athena-query`, `esg-assembly-doc` (shared modules bundled flat),
-merges the new environment variables (never replaces them), and syncs templates and prompts to the KB bucket.
-Then attach the managed policy `esg-usage-meter-write` (output `UsageMeterPolicyArn`) to the execution role of `esg-section-gen`.
 
-## 4. Update the report state machine
-Replace the definition of `ESGReportGenerationStateMachine` with `step_functions/esg_orchestrator.asl.json`
-(a backup of the previous one is `esg_orchestrator_backup_v3_pre_agentcore.asl.json`). The change only adds fields.
-
-## 5. Frontend
-```bash
-cd ../esg-chat-app-react && cp .env.example .env   # fill the three values from the CDK outputs
-npm ci && npm run build
+## 4. Report state machine
+```powershell
+$SM = "arn:aws:states:us-east-1:061039769766:stateMachine:ESGReportGenerationStateMachine"
+aws stepfunctions describe-state-machine --state-machine-arn $SM --query definition --output text | Out-File sm_backup.json -Encoding utf8
+aws stepfunctions update-state-machine --state-machine-arn $SM --definition file://step_functions/esg_orchestrator.asl.json
 ```
-Set the same variables in Amplify (Environment variables) if you deploy through Amplify.
 
-## 6. Smoke tests
-```bash
-API=<PlatformApiUrl>; KEY=<apiKey>
-curl -s $API/health
-curl -s -H "x-api-key: $KEY" "$API/compliance/readiness?year=2024" | head -c 400
-curl -s -H "x-api-key: $KEY" "$API/ghg/inventory?year=2024" | head -c 400
-curl -s -H "x-api-key: $KEY" -X POST $API/scenario -d '{"year":2024}' | head -c 400
-aws lambda invoke --function-name esg-platform-api --payload '{"action":"regulatory_scan"}' --cli-binary-format raw-in-base64-out /dev/stdout
+## 5. Users
+```powershell
+$pool = ($o | ? OutputKey -eq CognitoUserPoolId).OutputValue
+aws cognito-idp admin-create-user --user-pool-id $pool --username someone@company.com --user-attributes Name=email,Value=someone@company.com Name=email_verified,Value=true --desired-delivery-mediums EMAIL
+aws cognito-idp admin-add-user-to-group --user-pool-id $pool --username someone@company.com --group-name admin   # or viewer
 ```
-Then in the UI ask the assistant to "generate a GRI 305 report for 2024" and watch the Agent activity panel.
+A user without a group can sign in but every API call returns 403.
 
-## Known limits and notes
-- API Gateway HTTP APIs cut requests at 30 s; chat and scans use the Lambda Function URL (`VITE_AGENT_CHAT_URL`).
-- The API key is bundled into the frontend: a demo gate. Use Cognito or IAM auth before real use.
-- Regulatory sources in `platform_api/config/pspk_checklist.json` and peer scores in `config/peers.json` are illustrative.
-- TKBI classification per sector is an assumption (`_shared/esg_domain.py`), not the official taxonomy mapping.
-- Not built: feature #5 (data connectors to HR, core banking and utility systems).
-- Pre-signed download links are stored in the ledger and expire after 1 hour; the UI re-reads the ledger on every refresh only while the link is valid.
+## 6. Amplify environment and release
+```powershell
+$appId = "<appId>"
+$vars = @{
+  VITE_PLATFORM_API_URL  = ($o | ? OutputKey -eq PlatformApiUrl).OutputValue
+  VITE_COGNITO_DOMAIN    = ($o | ? OutputKey -eq CognitoDomain).OutputValue
+  VITE_COGNITO_CLIENT_ID = ($o | ? OutputKey -eq CognitoClientId).OutputValue
+}
+$pairs = ($vars.GetEnumerator() | % { "$($_.Key)=$($_.Value)" }) -join ","
+aws amplify update-app --app-id $appId --environment-variables $pairs
+aws amplify start-job --app-id $appId --branch-name main-agentcore --job-type RELEASE
+```
+Every push to `main-agentcore` redeploys the frontend. `.github/workflows/ci.yml` runs tests, CDK synth and the frontend build.
+
+## 7. Smoke tests
+```powershell
+$API = ($vars.VITE_PLATFORM_API_URL)
+Invoke-RestMethod "$API/health"                                   # {"ok": true}
+try { Invoke-RestMethod "$API/portfolio" } catch { $_.Exception.Response.StatusCode }   # 401 without a token
+```
+Then sign in on the Amplify URL: Portfolio, Compliance and GHG pages show the "Live · AWS" badge; the assistant answers;
+ask it to generate a GRI 305 report for 2024 and follow the timeline in Agent activity.
+
+## Security and operations notes
+- Users: no self-sign-up; password 12+ characters; MFA optional (enable per user in Cognito).
+- API: JWT authorizer on every route except `/health`; roles from the `admin` / `viewer` groups; stage throttle 30 req/s, burst 60.
+- Secrets: PII pseudonym key in Secrets Manager (`esg/pii-token-secret`). Do not rotate it casually: existing tokens would change.
+- IAM: Bedrock access is limited to the Claude 4.5 models; runtime S3 write is limited to the output bucket.
+- Retention: Lambda/runtime logs 14 days; usage and chat-job tables 14 days (TTL); ledger/executions/cache expire after 14 days.
+  Generated reports and compliance attestations/alerts are NOT expired.
+- Chat prompts are never stored; only the answer is kept for 14 days.
+- No CloudWatch alarms or dashboards (decision). Traces: Lambda X-Ray and AgentCore OpenTelemetry stay on.
+- Not verified in the build environment: Docker image build, `cdk deploy`, Cognito hosted-UI redirect with your real domain,
+  runtime log-group naming (`/aws/bedrock-agentcore/runtimes/<id>-DEFAULT`), live AWS calls.
+
+## Known limits
+- Regulatory sources and peer scores are illustrative; the TKBI split per sector is an assumption.
+- Not built yet: data connectors (RDS ETL), see the roadmap.

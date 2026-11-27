@@ -26,9 +26,11 @@ CACHE_TTL = int(os.environ.get("CACHE_TTL_SECONDS", "600"))
 
 CORS = {
     "Access-Control-Allow-Origin": os.environ.get("ALLOWED_ORIGIN", "*"),
-    "Access-Control-Allow-Headers": "Content-Type,x-api-key",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
 }
 
 _clients: dict[str, Any] = {}

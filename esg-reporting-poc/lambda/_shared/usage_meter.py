@@ -58,6 +58,7 @@ def record(task: str, model_id: str, tokens_in: int, tokens_out: int, *, executi
         "section_id": section_id,
         "source": source,
         "latency_ms": int(latency_ms),
+        "ttl": int(time.time()) + int(os.environ.get("USAGE_TTL_DAYS", "14")) * 86400,  # DynamoDB TTL attribute
     }
     table = _get_table()
     if table is not None:

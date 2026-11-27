@@ -1,6 +1,8 @@
 import { LayoutGrid, ShieldCheck, FileStack, Layers, Cpu, Flame, MessageSquare, FileText, BookOpen, Leaf } from 'lucide-react'
 import { BANK } from '../data/bank'
 import { platformEnabled } from '../lib/platform'
+import { authEnabled, currentUser, logout } from '../lib/auth'
+import { LogOut } from 'lucide-react'
 
 export const NAV = [
   { group: 'Platform', items: [
@@ -19,6 +21,7 @@ export const NAV = [
 ]
 
 export default function Sidebar({ active, onNavigate }) {
+  const user = authEnabled ? currentUser() : null
   return (
     <aside className="w-[272px] shrink-0 h-full flex flex-col relative z-20 bg-dark-800/90 backdrop-blur-xl border-r border-white/[0.06]">
       <div className="px-6 pt-7 pb-6">
@@ -54,6 +57,12 @@ export default function Sidebar({ active, onNavigate }) {
 
       <div className="m-4 p-4 rounded-2xl bg-white/[0.03] border border-white/[0.06]">
         <div className="flex items-center gap-2 mb-1.5"><span className="w-2 h-2 rounded-full bg-esg-green animate-pulse" /><span className="text-[11px] text-white/60">{platformEnabled ? 'Platform connected' : 'Demo mode'}</span></div>
+        {user && (
+          <div className="flex items-center gap-2 mb-2 pb-2 border-b border-white/[0.06]">
+            <div className="min-w-0 flex-1"><div className="text-[11px] text-white/70 truncate" title={user.email}>{user.email}</div><div className="text-[10px] text-white/35">{user.isAdmin ? 'Administrator' : 'Viewer'}</div></div>
+            <button onClick={logout} title="Sign out" className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10"><LogOut size={14} /></button>
+          </div>
+        )}
         <div className="text-[10px] text-white/30 leading-relaxed">{platformEnabled ? 'Live data from AWS' : 'Synthetic demo data'}<br />Made by Tokaicom Mitra Indonesia</div>
       </div>
     </aside>

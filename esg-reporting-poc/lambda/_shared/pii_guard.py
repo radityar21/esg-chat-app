@@ -18,7 +18,27 @@ import os
 import re
 from typing import Any
 
-_SECRET = os.environ.get("PII_TOKEN_SECRET", "dev-only-secret-change-me").encode()
+_secret_cache: bytes | None = None
+
+
+def _secret() -> bytes:
+    """HMAC key for pseudonyms. Order: PII_TOKEN_SECRET (tests, local) -> Secrets Manager (PII_TOKEN_SECRET_ARN).
+    With PII_REQUIRE_SECRET=1 (set in every deployed component) a missing secret is an error, never a weak default."""
+    global _secret_cache
+    if _secret_cache is not None:
+        return _secret_cache
+    value = os.environ.get("PII_TOKEN_SECRET")
+    arn = os.environ.get("PII_TOKEN_SECRET_ARN")
+    if not value and arn:
+        import boto3  # lazy: keeps the module importable without AWS
+
+        value = boto3.client("secretsmanager").get_secret_value(SecretId=arn)["SecretString"]
+    if not value:
+        if os.environ.get("PII_REQUIRE_SECRET") == "1":
+            raise RuntimeError("PII token secret is not configured (PII_TOKEN_SECRET_ARN)")
+        value = "dev-only-secret-change-me"
+    _secret_cache = value.encode()
+    return _secret_cache
 
 NIK_RE = re.compile(r"(?<!\d)\d{16}(?!\d)")
 NPWP_RE = re.compile(r"(?<!\d)\d{2}\.\d{3}\.\d{3}\.\d-\d{3}\.\d{3}(?!\d)")
@@ -52,7 +72,7 @@ CLASSIFICATION: dict[str, tuple[str, str]] = {
 
 
 def token(kind: str, value: str, n: int = 4) -> str:
-    digest = hmac.new(_SECRET, f"{kind}:{value}".encode(), hashlib.sha256).hexdigest().upper()
+    digest = hmac.new(_secret(), f"{kind}:{value}".encode(), hashlib.sha256).hexdigest().upper()
     return f"{kind}_{digest[:n]}"
 
 

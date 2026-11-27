@@ -1,0 +1,40 @@
+name: ci
+on:
+  push:
+    branches: [main-agentcore]
+  pull_request:
+    branches: [main-agentcore]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: esg-reporting-poc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pytest boto3 pyyaml aws-cdk-lib constructs
+      - run: python -m pytest tests -q
+      - name: CDK synth
+        run: |
+          mkdir -p build/layer/python
+          cd infra
+          CDK_OUTDIR=$RUNNER_TEMP/cdkout CDK_DEFAULT_ACCOUNT=061039769766 CDK_CONTEXT_JSON='{"appUrl":"https://main-agentcore.example.amplifyapp.com"}' python app.py
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: esg-chat-app-react
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: esg-chat-app-react/package-lock.json
+      - run: npm ci
+      - run: npm run build

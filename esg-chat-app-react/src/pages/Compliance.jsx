@@ -4,7 +4,8 @@ import { CheckCircle2, CircleDot, XCircle, ScanSearch, FileDiff, Wrench, Globe2 
 import { CHECKLIST, PILLARS, pillarScores, score, SOURCES, ALERTS_BASE, ALERT_NEW } from '../data/compliance'
 import { PageHeader, Panel, Gauge, Pill, Button, Tabs, C } from '../components/ui'
 import SourceBadge from '../components/SourceBadge'
-import { api, useLive, platformEnabled, CHAT_BASE } from '../lib/platform'
+import { runScan, useLive, platformEnabled } from '../lib/platform'
+import { authEnabled, currentUser } from '../lib/auth'
 
 const statusMeta = {
   ready: { icon: CheckCircle2, color: 'text-esg-green', label: 'Ready', tone: 'green' },
@@ -36,7 +37,8 @@ export default function Compliance() {
   const [scanResult, setScanResult] = useState(null)
   const [scanError, setScanError] = useState(null)
   const timer = useRef()
-  const runScan = () => {
+  const canScan = !authEnabled || Boolean(currentUser()?.isAdmin)
+  const runScanClick = () => {
     setScanState('scanning'); setProgress(0); setShowDiff(false); setScanError(null)
     let i = 0
     const live = platformEnabled
@@ -46,8 +48,8 @@ export default function Compliance() {
       if (!live && i >= SOURCES.length) { clearInterval(timer.current); setTimeout(() => setScanState('done'), 500) }
     }, 650)
     if (live) {
-      api('/compliance/scan', { method: 'POST', base: CHAT_BASE, timeout: 120000 })
-        .then((r) => { setScanResult(r); alertsLive.reload() })
+      runScan()
+        .then((r) => { setScanResult({ new: r.alerts.filter((a) => a.isNew).length, errors: r.errors }); alertsLive.reload() })
         .catch((e) => setScanError(e.message))
         .finally(() => { clearInterval(timer.current); setProgress(SOURCES.length); setScanState('done') })
     }
@@ -154,7 +156,7 @@ export default function Compliance() {
       {tab === 'reg' && (
         <div className="grid grid-cols-12 gap-5">
           <Panel className="col-span-4" title="Monitored sources" subtitle="Scheduled crawler · daily"
-            right={<Button icon={ScanSearch} onClick={runScan} disabled={scanState === 'scanning'}>{scanState === 'scanning' ? 'Scanning…' : 'Run scan now'}</Button>}>
+            right={<Button icon={ScanSearch} onClick={runScanClick} disabled={scanState === 'scanning' || !canScan}>{scanState === 'scanning' ? 'Scanning…' : 'Run scan now'}</Button>}>
             <div className="space-y-2.5">
               {SOURCES.map((s, idx) => {
                 const done = scanState !== 'idle' && progress > idx
@@ -169,6 +171,7 @@ export default function Compliance() {
                 )
               })}
             </div>
+            {!canScan && <div className="mt-4 text-xs text-white/45">Only administrators can start a scan.</div>}
             {scanError && <div className="mt-4 text-xs text-esg-red">Scan failed: {scanError}</div>}
             {scanResult && <div className="mt-4 text-xs text-white/60">{scanResult.new} new item(s) found{scanResult.errors?.length ? `, ${scanResult.errors.length} source(s) unreachable` : ''}.</div>}
             <div className="mt-5 text-[11px] text-white/35 leading-relaxed">Detected changes are classified by an LLM against the section map of your report templates, then routed to the owning team.</div>
