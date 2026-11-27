@@ -63,7 +63,7 @@ export default function EsgMetrics({ onNavigate }) {
                 <thead>
                   <tr className="text-left text-white/40 text-[10px] uppercase tracking-wider">
                     <th className="px-5 py-3 font-semibold">Metric</th><th className="px-3 py-3 font-semibold">Standard</th>
-                    {m.entities.map((e) => <th key={e.id} className="px-3 py-3 font-semibold"><span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ background: ENTITY_COLORS[e.id] }} />{e.name.split(' (')[0].replace('Generic Financial Institution', 'Bank (parent)')}</th>)}
+                    {m.entities.map((e) => <th key={e.id} className="px-3 py-3 font-semibold"><span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ background: ENTITY_COLORS[e.id] }} />{e.name.split(' (')[0]}</th>)}
                     <th className="px-3 py-3 font-semibold">Coverage</th>
                   </tr>
                 </thead>

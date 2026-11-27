@@ -13,11 +13,11 @@ Consistency with the existing data:
 Everything else is generated with a fixed seed, so re-running gives the same files.
 
 Deliberate data problems (they show up as data alerts in the Data Hub):
-  * GFI Asuransi has no water data for 2023, and GFI Sekuritas never reported refrigerant top-ups.
-  * Every ninth GFI Syariah branch has no electricity data for October-December 2024 (meter migration).
-  * One GFI Multifinance branch reports ten times its normal fleet fuel in July 2024 (entry error), and one
-    GFI Syariah branch reports six times its normal electricity in May 2023 (meter fault).
-  * Most GFI Multifinance waste figures are estimates.
+  * BNS Asuransi has no water data for 2023, and BNS Sekuritas never reported refrigerant top-ups.
+  * Every ninth BNS Syariah branch has no electricity data for October-December 2024 (meter migration).
+  * One BNS Multifinance branch reports ten times its normal fleet fuel in July 2024 (entry error), and one
+    BNS Syariah branch reports six times its normal electricity in May 2023 (meter fault).
+  * Most BNS Multifinance waste figures are estimates.
   * Some ESG metrics are not collected for some entities (see MISSING_METRICS).
 """
 
@@ -37,18 +37,18 @@ YEARS = (2023, 2024)
 RNG = np.random.default_rng(20261127)
 
 # ── organisation ──────────────────────────────────────────────────────────────────────────────────
-# ownership_pct and operational_control per year. GFI Asuransi is a joint venture without operational control: it is
+# ownership_pct and operational_control per year. BNS Asuransi is a joint venture without operational control: it is
 # excluded under the operational-control approach and included at 49 % under the equity-share approach.
 ENTITIES = [
     # id, name, type, parent, {year: ownership}, control, facilities per type
-    ("ENT-BANK", "Generic Financial Institution (parent bank)", "bank", "", {2023: 100.0, 2024: 100.0}, True, None),
-    ("ENT-SYR", "GFI Syariah", "sharia_bank", "ENT-BANK", {2023: 99.9, 2024: 99.9}, True,
+    ("ENT-BANK", "Bank Nusantara Sejahtera (parent bank)", "bank", "", {2023: 100.0, 2024: 100.0}, True, None),
+    ("ENT-SYR", "BNS Syariah", "sharia_bank", "ENT-BANK", {2023: 99.9, 2024: 99.9}, True,
      {"headquarters": 1, "regional_office": 4, "branch": 55, "warehouse": 2}),
-    ("ENT-MFN", "GFI Multifinance", "multifinance", "ENT-BANK", {2023: 70.0, 2024: 75.0}, True,
+    ("ENT-MFN", "BNS Multifinance", "multifinance", "ENT-BANK", {2023: 70.0, 2024: 75.0}, True,
      {"headquarters": 1, "regional_office": 3, "branch": 38, "warehouse": 3}),
-    ("ENT-SEK", "GFI Sekuritas", "securities", "ENT-BANK", {2023: 85.0, 2024: 85.0}, True,
+    ("ENT-SEK", "BNS Sekuritas", "securities", "ENT-BANK", {2023: 85.0, 2024: 85.0}, True,
      {"headquarters": 1, "branch": 11}),
-    ("ENT-ASR", "GFI Asuransi (joint venture)", "insurance", "ENT-BANK", {2023: 49.0, 2024: 49.0}, False,
+    ("ENT-ASR", "BNS Asuransi (joint venture)", "insurance", "ENT-BANK", {2023: 49.0, 2024: 49.0}, False,
      {"headquarters": 1, "regional_office": 2, "branch": 15}),
 ]
 PREFIX = {"ENT-BANK": "FAC", "ENT-SYR": "SYR", "ENT-MFN": "MFN", "ENT-SEK": "SEK", "ENT-ASR": "ASR"}
@@ -282,12 +282,13 @@ def activity(energy: pd.DataFrame, fac: pd.DataFrame) -> pd.DataFrame:
                 add(y, m, f, "waste_landfill", waste * (1 - rec_share), "kg", "estimate" if waste_est else "hauler_manifest", waste_est, ev=f"WST-{ev}")
                 add(y, m, f, "waste_recycled", waste * rec_share, "kg", "estimate" if waste_est else "hauler_manifest", waste_est, ev=f"WST-{ev}")
                 add(y, m, f, "paper_a4", hc * frng.uniform(0.4, 0.7) * (0.85 if y == 2024 else 1), "ream", "procurement", ev=f"PO-{ev}")
-            # refrigerant top-ups once a year (not collected by GFI Sekuritas)
+            # refrigerant top-ups once a year, in the month of the HVAC service visit (not collected by BNS Sekuritas)
             if f.entity_id != "ENT-SEK":
                 ac_kg = f.floor_area_m2 / 35 * 1.2
-                add(y, 12, f, "refrigerant_r410a", ac_kg * frng.uniform(0.04, 0.08), "kg", "maintenance_log", ev=f"HVAC-{f.facility_id}-{y}")
+                visit = int(frng.integers(1, 13))
+                add(y, visit, f, "refrigerant_r410a", ac_kg * frng.uniform(0.04, 0.08), "kg", "maintenance_log", ev=f"HVAC-{f.facility_id}-{y}")
                 if y == 2024 and ftype in ("branch", "regional_office") and frng.random() < 0.3:
-                    add(y, 12, f, "refrigerant_r32", ac_kg * 0.2 * frng.uniform(0.03, 0.06), "kg", "maintenance_log", ev=f"HVAC-{f.facility_id}-{y}")
+                    add(y, visit, f, "refrigerant_r32", ac_kg * 0.2 * frng.uniform(0.03, 0.06), "kg", "maintenance_log", ev=f"HVAC-{f.facility_id}-{y}")
         # entity-level travel (booked on the headquarters) and commuting (annual survey)
         for ent, *_ in ENTITIES:
             hq = fy[(fy.entity_id == ent) & (fy.facility_type == "headquarters")].iloc[0]
@@ -297,9 +298,11 @@ def activity(energy: pd.DataFrame, fac: pd.DataFrame) -> pd.DataFrame:
                 add(y, m, hq, "air_travel_domestic", k * RNG.uniform(70000, 95000), "passenger-km", "travel_agency", ev=f"TRV-{ent}-{y}{m:02d}")
                 add(y, m, hq, "air_travel_international", k * RNG.uniform(15000, 30000), "passenger-km", "travel_agency", ev=f"TRV-{ent}-{y}{m:02d}")
                 add(y, m, hq, "hotel_night", k * RNG.uniform(120, 180), "room-night", "travel_agency", ev=f"TRV-{ent}-{y}{m:02d}")
-            km = heads * 230 * 2 * 14  # 230 working days, return trip, 14 km one way
+            km = heads * 230 * 2 * 14  # 230 working days, return trip, 14 km one way; the annual survey is booked per month
             for a, share in (("commute_car", 0.32), ("commute_motorcycle", 0.48), ("commute_public", 0.20)):
-                add(y, 12, hq, a, km * share * RNG.uniform(0.95, 1.05), "km", "employee_survey", True, ev=f"SURVEY-{ent}-{y}")
+                total = km * share * RNG.uniform(0.95, 1.05)
+                for m in range(1, 13):
+                    add(y, m, hq, a, total / 12, "km", "employee_survey", True, ev=f"SURVEY-{ent}-{y}")
     df = pd.DataFrame(rows)
     df["instrument_qty"] = df["instrument_qty"].astype(float)
     return df[["activity_id", "facility_id", "entity_id", "activity_type", "quantity", "unit", "instrument_qty", "data_source",

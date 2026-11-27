@@ -198,17 +198,33 @@ flowchart TD
   broken query never looks like a compliance gap.
 - **Scenario what-if.** A transparent screening model on the loan book: transition loss from a carbon price per sector,
   physical loss on property collateral in flood zones, green-loan opportunity. Sliders re-run it through the API.
+- **Report Builder.** The user picks framework, year, language (English default, Bahasa Indonesia) and sections, and
+  can save the setup as a configuration (admins). Generate queues a job: the platform Lambda invokes the AgentCore
+  runtime in mode `start`, which starts and supervises the report pipeline with that configuration. Section structure has
+  one source, `lambda/_shared/report_catalog.py`, used by the planner, the section generator and the API. Section
+  templates are versioned in S3 (`template-versions/<file>/`); a change (by an admin, or proposed by the agent with
+  author "agent") is a draft until an admin publishes it to `prompts/templates/`.
+- **Regulatory findings.** Every scan is kept (`compliance/scan-history.json`). The classifier gets the bank context
+  and marks items that do not apply as not relevant. Admins set a status (new, reviewed, actioned, not relevant).
+  "Analyze with AI" sends the finding to the assistant, whose tool `analyze_regulatory_finding` gathers the affected
+  templates and checklist items.
+- **Chat history (hybrid).** AgentCore Memory (`esg_chat_memory`, 14-day events) gives the agent its conversation
+  context through the Strands session manager, keyed by user and session. A DynamoDB table holds what the UI lists:
+  titles and a PII-masked transcript, 14-day TTL. The History menu reopens a conversation with the same session id.
+- **ESG Data Hub and GHG accounting.** See section 7.4.
 
 ---
 
 ## 6. The agent in detail
 
-### 6.1 Tools (15)
+### 6.1 Tools (20)
 | Group | Tools |
 |---|---|
 | Pipelines | `plan_pipeline`, `list_capabilities`, `start_pipeline`, `get_run_status`, `supervise_run`, `explain_run`, `get_download_link` |
 | Platform | `get_compliance_readiness`, `get_regulatory_alerts`, `get_ghg_inventory`, `run_climate_scenarios`, `get_ai_cost_summary` |
 | Source data | `sync_data_from_database`, `inspect_source_database`, `get_etl_report` |
+| Reports and findings | `analyze_regulatory_finding`, `propose_template_change`, `get_report_template`, `list_report_configs` |
+| Group data | `get_esg_data` (views overview, ledger, facility, metrics, alerts) |
 
 ### 6.2 Where the LLM decides and where code decides
 | Decision | Made by | Why |
@@ -257,13 +273,20 @@ under it as a child run. Review notes carry their own label (Loaded, Repaired, N
 | `loan_portfolio` | 4,400 | year, loan |
 | `hr_metrics` | 2 (aggregate, no personal data) | year |
 | `scope3_operational_activity` | 16 (categories 1-7) | year, category, activity |
+| `entity` | 10 (5 legal entities x 2 years) | year, entity |
+| `facility` | 722 (about 360 facilities per year) | year, facility |
+| `emission_factor` | 82 (two factor sets) | year, set, activity, region |
+| `activity_data` | 59,097 (monthly energy, fuel, refrigerants, water, waste, paper, travel, commuting) | year, activity id |
+| `esg_metric` | 341 (social, governance, sustainable finance, subsidiaries' financed emissions) | year, entity, metric, dimension |
 
 ### 7.2 Data lake
 | Zone (bucket) | Tables | Written by |
 |---|---|---|
-| Raw `esg-data-raw-<acct>` | the four source tables | Glue extract |
+| Raw `esg-data-raw-<acct>` | the nine source tables | Glue extract |
 | Curated `esg-data-curated-<acct>` | `ghg_scope1`, `ghg_scope2`, `ghg_scope3_financed` | Glue scope jobs |
 | Aggregated `esg-data-aggregated-<acct>` | `ghg_summary_annual`, `pcaf_by_sector`, `scope1_by_facility` | Glue aggregation |
+| Curated (view) | `esg_curated.ghg_ledger`: activity x emission factor for every factor set | Athena view (`sql/ddl/06_group_data.sql`) |
+
 The platform reads the aggregated zone (and the raw loan book for portfolio analytics) through Athena.
 
 ### 7.3 Other stores
@@ -275,6 +298,36 @@ The platform reads the aggregated zone (and the raw loan book for portfolio anal
 | DynamoDB usage | one item per model call: tokens, cost, all-Sonnet baseline, execution | 14 days |
 | DynamoDB chat jobs | answer per chat turn (no prompt) | 14 days |
 | DynamoDB strategy memory | trials and successes per failure type x strategy | kept |
+| DynamoDB conversations | conversation titles and PII-masked transcript per user | 14 days (TTL) |
+| AgentCore Memory `esg_chat_memory` | conversation events for the agent's context | 14 days |
+| `esg-output-reports-<acct>/report-configs/` | saved Report Builder configurations | kept |
+
+### 7.4 Group data and GHG accounting (ESG Data Hub)
+- **Organisational boundary.** Five legal entities: the parent bank, BNS Syariah, BNS Multifinance, BNS Sekuritas (all
+  under operational control) and BNS Asuransi, a 49 % joint venture without operational control. Operational control
+  (default) counts controlled entities at 100 % and excludes the joint venture; equity share counts every entity at
+  its ownership share (GHG Protocol chapter 3). Ownership can change per year (Multifinance 70 % to 75 %).
+- **Ledger.** `esg_curated.ghg_ledger` multiplies every activity record by its factor:
+  quantity x (CO2 + CH4 x GWP + N2O x GWP + direct CO2e) / 1000, with IPCC AR6 GWP100. Market-based Scope 2 deducts
+  certificate-covered electricity first. Because it is a view, changing a factor recalculates every year without a
+  reload, and both factor sets are always available: `ID_NATIONAL` (national grid average, the basis of the published
+  inventory) and `ID_REGIONAL` (one grid factor per electricity system). The factor values are illustrative and must be
+  replaced by the officially published ones before external use.
+- **Consistency with the report pipeline.** The bank's 220 facilities and their meter data come from
+  `energy_consumption`, and the bank headcount equals `hr_metrics`, so the ledger reconciles with the published
+  inventory; the GHG Accounting page shows the reconciliation and explains differences (the pipeline fills missing
+  fuel readings, the ledger counts recorded activity only).
+- **Metrics catalog.** `lambda/_shared/esg_metric_catalog.py` lists every metric the report needs (GRI, POJK 51,
+  PCAF) and which entity types it applies to. Environmental metrics are derived from activity data; social, governance
+  and finance metrics come from `esg_metric`. A metric that is not delivered is "not reported", never zero.
+- **Data alerts.** Computed on every bundle load: activity not collected by an entity, partial coverage, missing
+  months per facility, anomalies (a month above 3x the facility's other months), high share of estimates, missing
+  factors, unit mismatches and catalog metrics not reported. Each alert names the impact and the action. The synthetic
+  data contains such problems on purpose.
+- **API.** `/data/overview|ledger|facilities|facility|metrics|alerts|factors` (`lambda/platform_api/datahub.py`). One
+  bundle of about 13 Athena queries per year runs in parallel and is cached 10 minutes (Refresh bypasses the cache);
+  approach, factor set and entity are applied in Python, so switching them costs no query. Tests run the same SQL on
+  DuckDB against the seed files (`scripts/datahub_local.py`), which also produces the frontend demo snapshot.
 
 ---
 
@@ -322,13 +375,19 @@ The platform reads the aggregated zone (and the raw loan book for portfolio anal
 | Asynchronous chat and scans with polling | Long HTTP requests | API Gateway 30-second limit; allows JWT protection everywhere |
 | Single production environment | Staging + production | New product; CDK keeps it reproducible |
 | Synthetic data treated as real | Real bank data | Demo safety; same pipelines would run on real data |
+| Ledger as an Athena view over raw activity data | A Glue job writing curated emissions | Recalculation with another factor set needs no reload; SQL testable locally |
+| Hybrid chat history (AgentCore Memory + DynamoDB) | DynamoDB only; Memory only | Memory gives the agent context; DynamoDB gives titles and listing for the UI |
+| Template changes as versioned drafts with admin publish | Edit in place | Every report change is reviewed and can be rolled back |
 
 ---
 
 ## 11. Limits and next steps
 
 - Not built yet: connectors to real source systems beyond the PostgreSQL source (core banking, HR, utilities),
-  human approval before publishing, AgentCore Gateway and Memory (strategy memory uses DynamoDB today).
+  data entry in the app (the group data is synthetic and loaded through the source database), human approval before
+  publishing a report, AgentCore Gateway. Strategy memory uses DynamoDB; AgentCore Memory is used for chat context.
+- The report pipeline still reports the parent bank only; the group ledger is shown in the Data Hub pages and to the
+  agent. Bahasa Indonesia sections are not checked by the English prohibited-phrase validation rules.
 - Illustrative content: peer scores, the regulatory source list, the TKBI split per sector, scenario parameters.
 - Not yet verified against live runs at the time of writing: the full first data load and first report through the
   adaptive loop (see DEPLOY_PLATFORM.md section 10).
