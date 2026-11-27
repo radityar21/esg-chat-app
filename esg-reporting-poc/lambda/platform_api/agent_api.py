@@ -9,7 +9,7 @@ import time
 import uuid
 from typing import Any
 
-from . import common
+from . import common, conversations
 
 RUNTIME_ARN = os.environ.get("AGENTCORE_RUNTIME_ARN", "")
 EXEC_ID_RE = re.compile(r"^[A-Za-z0-9_\-:.]{1,120}$")
@@ -62,12 +62,36 @@ def chat_submit(body: dict[str, Any], jobs: Any = None, invoke: Any = None) -> d
     return {"job_id": job_id, "session_id": sid, "status": "queued"}
 
 
+def start_submit(body: dict[str, Any], jobs: Any = None, invoke: Any = None) -> dict[str, Any]:
+    """Queue a pipeline start from the Report Builder. The AgentCore orchestrator starts and supervises it, exactly like a
+    run requested in chat; the job result carries the execution id."""
+    from . import report_builder
+
+    payload = report_builder.generate_request(body)
+    user = str(body.get("_user") or "anonymous")
+    payload["user"] = user
+    job_id = uuid.uuid4().hex
+    sid = f"start-{uuid.uuid4().hex}"
+    (jobs or _jobs()).put_item(Item={"job_id": job_id, "user": user, "status": "queued", "session_id": sid, "created_at": int(time.time()),
+                                     "ttl": int(time.time()) + JOB_TTL_DAYS * 86400})
+    (invoke or _invoke_self)({"action": "agent_chat_worker", "job_id": job_id, "runtime_payload": payload, "session_id": sid, "user": user})
+    return {"job_id": job_id, "status": "queued"}
+
+
 def chat_worker(event: dict[str, Any], jobs: Any = None, runtime: Any = None) -> dict[str, Any]:
     table = jobs or _jobs()
     job_id = event["job_id"]
     table.update_item(Key={"job_id": job_id}, UpdateExpression="SET #s = :s", ExpressionAttributeNames={"#s": "status"}, ExpressionAttributeValues={":s": "running"})
     try:
-        out = (runtime or _runtime)({"mode": "chat", "prompt": event["prompt"], "user": event.get("user", "")}, event["session_id"])
+        payload = event.get("runtime_payload") or {"mode": "chat", "prompt": event["prompt"], "user": event.get("user", "")}
+        out = (runtime or _runtime)(payload, event["session_id"])
+        if payload.get("mode") == "chat" and event.get("user") and conversations.TABLE:
+            try:
+                conversations.record_turn(event["user"], event["session_id"], event["prompt"], str(out.get("response", "")))
+            except Exception:  # noqa: BLE001 - history must never fail a chat turn
+                import logging
+
+                logging.getLogger().exception("conversation history write failed")
         table.update_item(Key={"job_id": job_id}, UpdateExpression="SET #s = :s, #r = :r", ExpressionAttributeNames={"#s": "status", "#r": "result"},
                           ExpressionAttributeValues={":s": "done", ":r": json.dumps(out)[:300000]})
         return {"ok": True}

@@ -1,4 +1,4 @@
-import { LayoutGrid, ShieldCheck, FileStack, Layers, Cpu, Flame, MessageSquare, FileText, BookOpen, Leaf } from 'lucide-react'
+import { LayoutGrid, ShieldCheck, FileStack, Layers, Cpu, Flame, MessageSquare, FileText, BookOpen, Leaf, SlidersHorizontal } from 'lucide-react'
 import { BANK } from '../data/bank'
 import { platformEnabled } from '../lib/platform'
 import { authEnabled, currentUser, logout } from '../lib/auth'
@@ -15,6 +15,7 @@ export const NAV = [
   ] },
   { group: 'Workspace', items: [
     { id: 'chat', icon: MessageSquare, label: 'AI Assistant' },
+    { id: 'builder', icon: SlidersHorizontal, label: 'Report Builder' },
     { id: 'reports', icon: FileText, label: 'Report Runs' },
     { id: 'reference', icon: BookOpen, label: 'Reference' },
   ] },

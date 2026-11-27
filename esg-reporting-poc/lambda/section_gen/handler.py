@@ -58,12 +58,14 @@ try:
     from model_routing import MODELS as _MODELS, resolve as _resolve_model, task_for_section as _task_for_section
     from pii_guard import mask_payload as _mask_payload
     from usage_meter import record as _record_usage
+    import report_catalog as _catalog
 except ImportError:  # pragma: no cover
     _MODELS = None
     _resolve_model = None
     _task_for_section = None
     _mask_payload = None
     _record_usage = None
+    _catalog = None
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -90,17 +92,19 @@ OVERLAY_MAP: dict[str, str | None] = {
     "NONE": None,
 }
 
-# REQ-TMPL-11: Template file naming convention
+# REQ-TMPL-11: Template file naming convention. The file names are those in the repository's templates/ folder
+# (uploaded to prompts/templates/). They come from _shared/report_catalog.py; this literal is the fallback for packages
+# without the shared modules and is kept identical by tests/test_report_catalog.py.
 TEMPLATE_MAP: dict[str, str] = {
-    "scope1": "templates/scope1_template.txt",
-    "scope2": "templates/scope2_template.txt",
-    "scope3_pcaf": "templates/scope3_pcaf_template.txt",
-    "intensity": "templates/intensity_template.txt",
-    "social": "templates/social_template.txt",
-    "reduction": "templates/reduction_template.txt",
-    "governance": "templates/governance_template.txt",
-    "targets": "templates/targets_template.txt",
-    "summary": "templates/summary_template.txt",
+    "scope1": "templates/section_scope1.txt",
+    "scope2": "templates/section_scope2.txt",
+    "scope3_pcaf": "templates/section_scope3_pcaf.txt",
+    "intensity": "templates/section_intensity.txt",
+    "social": "templates/section_social.txt",
+    "reduction": "templates/section_reduction.txt",
+    "governance": "templates/section_governance.txt",
+    "targets": "templates/section_targets.txt",
+    "summary": "templates/section_summary.txt",
     "double_materiality": "templates/section_double_materiality.txt",
     # Unified (multi-framework) templates
     "scope1_unified": "templates/section_unified_scope1.txt",
@@ -352,6 +356,10 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     kb_id: str | None = event.get("kb_id")
     execution_id: str = event.get("execution_id", "local-test")
     correction: dict | None = event.get("correction")  # set by the AgentCore self-correction loop
+    # language: from the Step Functions item (template_config) or directly (self-correction loop). Default English.
+    language: str = str(event.get("language") or (event.get("template_config") or {}).get("language") or "en").lower()
+    if language not in ("en", "id"):
+        language = "en"
 
     # Defence in depth: nothing that looks like personal data may reach the model (UU PDP).
     pii_report: dict = {}
@@ -372,7 +380,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     # REQ-TMPL-11: Template file naming
     template_key = _resolve_template_key(section_id)
     logger.info(f"Resolved section_id '{section_id}' -> template_key '{template_key}'")
-    template_path = TEMPLATE_MAP.get(template_key)
+    template_path = (f"templates/{_catalog.template_file(template_key)}" if _catalog and template_key in _catalog.SECTIONS
+                     else TEMPLATE_MAP.get(template_key))
     if not template_path:
         raise ValueError(f"No template for template_key '{template_key}'. Valid: {list(TEMPLATE_MAP.keys())}")
     section_template = _load_prompt_from_s3(template_path)
@@ -450,6 +459,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 ## ADDITIONAL INSTRUCTIONS
 {_load_insight_instructions(template_key)}
 {_build_correction_block(correction)}
+{_language_block(language)}
 Generate the section for reporting_year={reporting_year}, framework={framework}, section_id={section_id}.
 Return ONLY valid JSON per the output contract.
 """
@@ -531,6 +541,7 @@ Return ONLY valid JSON per the output contract.
         "model_id": model_id,
         "routing_task": routed_task,
         "correction_attempt": (correction or {}).get("attempt", 0),
+        "language": language,
         "pii_masked_fields": pii_report,
         "prompt_version": "1.0.0",
         "generation_timestamp": datetime.now(timezone.utc).isoformat(),
@@ -578,6 +589,17 @@ Return ONLY valid JSON per the output contract.
 # =============================================================================
 # KNOWLEDGE BASE RETRIEVAL (REQ-KB-06, REQ-KB-08, REQ-KB-09)
 # =============================================================================
+
+def _language_block(language: str) -> str:
+    """Language of the narrative. Numbers keep the DATA INPUT format so the numeric validation still matches them."""
+    if language != "id":
+        return ""
+    return ("\n## LANGUAGE\n"
+            "Write every title, paragraph, table header and footnote in formal Bahasa Indonesia (the register used in OJK sustainability reports). "
+            "Keep these in English: tCO2e, MWh, PCAF, GHG Protocol, Scope 1/2/3, framework names and paragraph references. "
+            "Write numbers EXACTLY as in DATA INPUT: a period as the decimal separator and no thousands separators changes "
+            "(for example 12480.5, not 12.480,5). Use 'Bank' or 'institusi', never 'kami' (no first person).\n")
+
 
 def _build_correction_block(correction: dict | None) -> str:
     """Render the corrective instructions produced by the AgentCore validation loop.

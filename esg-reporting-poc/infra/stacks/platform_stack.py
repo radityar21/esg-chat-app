@@ -108,6 +108,10 @@ class EsgPlatformStack(Stack):
         # Learned success rates of correction strategies. Tiny, and valuable over time, so it is kept (no TTL).
         memory = ddb.Table(self, "AgentMemoryTable", partition_key=ddb.Attribute(name="key", type=ddb.AttributeType.STRING),
                            billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE, point_in_time_recovery=True)
+        # Chat history shown in the UI (list + transcript per user), 14-day TTL. The agent's own context lives in AgentCore Memory.
+        convs = ddb.Table(self, "ConversationsTable", partition_key=ddb.Attribute(name="user", type=ddb.AttributeType.STRING),
+                          sort_key=ddb.Attribute(name="sk", type=ddb.AttributeType.STRING), billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
+                          removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")
         jobs = ddb.Table(self, "ChatJobsTable", table_name="esg-chat-jobs", partition_key=ddb.Attribute(name="job_id", type=ddb.AttributeType.STRING),
                          billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")
 
@@ -121,7 +125,7 @@ class EsgPlatformStack(Stack):
         env = {
             "OUTPUT_BUCKET": output_bucket, "BANK_ID": "GENERIC_FI_001", "COMPANY_NAME": company_name, "BASE_YEAR": "2023", "AWS_ACCOUNT_ID": acct,
             "USAGE_TABLE": usage.table_name, "MODEL_ROUTING_PROFILE": routing_profile, "ALLOWED_ORIGIN": origins[0],
-            "ATHENA_WORKGROUP": "esg-reporting-workgroup", "CHAT_JOBS_TABLE": jobs.table_name, "USAGE_TTL_DAYS": "14", "JOB_TTL_DAYS": "14",
+            "ATHENA_WORKGROUP": "esg-reporting-workgroup", "CHAT_JOBS_TABLE": jobs.table_name, "CONVERSATIONS_TABLE": convs.table_name, "CONVERSATION_TTL_DAYS": "14", "USAGE_TTL_DAYS": "14", "JOB_TTL_DAYS": "14",
             "PII_TOKEN_SECRET_ARN": pii_secret.secret_name, "PII_REQUIRE_SECRET": "1",
             "PII_GUARDRAIL_ID": guardrail.attr_guardrail_id, "PII_GUARDRAIL_VERSION": guardrail_version.attr_version,
         }
@@ -133,6 +137,10 @@ class EsgPlatformStack(Stack):
             description="ESG platform API: compliance, GHG inventory, portfolio, scenarios, governance, FinOps")
         usage.grant_read_write_data(platform_fn)  # read for FinOps, write for the regulatory classifier's own metering
         jobs.grant_read_write_data(platform_fn)
+        convs.grant_read_write_data(platform_fn)
+        kb_bucket_arn = f"arn:aws:s3:::esg-kb-documents-{acct}"
+        platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["s3:PutObject"],  # Report Builder: template versions and publishing
+                                                           resources=[f"{kb_bucket_arn}/prompts/templates/*", f"{kb_bucket_arn}/template-versions/*"]))
         pii_secret.grant_read(platform_fn)
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["lambda:InvokeFunction"], resources=[platform_fn_arn]))  # asynchronous self-invocation (chat turns, scans)
         platform_fn.add_to_role_policy(iam.PolicyStatement(actions=["athena:StartQueryExecution", "athena:GetQueryExecution", "athena:GetQueryResults", "athena:StopQueryExecution"],
@@ -211,6 +219,13 @@ class EsgPlatformStack(Stack):
         rt_role.add_to_policy(iam.PolicyStatement(actions=["s3:PutObject", "s3:DeleteObject"], resources=[f"arn:aws:s3:::{output_bucket}/*"]))
         rt_role.add_to_policy(iam.PolicyStatement(actions=["bedrock:Retrieve"], resources=[f"arn:aws:bedrock:{region}:{acct}:knowledge-base/{kb_id}"]))
 
+        # Short-term conversation memory for the agent (no long-term extraction strategies), events expire after 14 days
+        chat_memory = agentcore.CfnMemory(self, "ChatMemory", name="esg_chat_memory", event_expiry_duration=14,
+                                          description="Conversation context of the ESG orchestrator, per user and conversation")
+        rt_role.add_to_policy(iam.PolicyStatement(actions=["bedrock-agentcore:CreateEvent", "bedrock-agentcore:ListEvents", "bedrock-agentcore:GetEvent",
+                                                           "bedrock-agentcore:DeleteEvent", "bedrock-agentcore:ListSessions", "bedrock-agentcore:GetMemory",
+                                                           "bedrock-agentcore:ListActors"], resources=[chat_memory.attr_memory_arn]))
+
         runtime = agentcore.CfnRuntime(
             self, "OrchestratorRuntime", agent_runtime_name="esg_orchestrator", description="ESG report orchestrator: routes requests, supervises Step Functions, self-corrects validation failures",
             role_arn=rt_role.role_arn, agent_runtime_artifact=artifact,
@@ -219,7 +234,7 @@ class EsgPlatformStack(Stack):
                 "AWS_REGION": region, "AWS_ACCOUNT_ID": acct, "REPORT_STATE_MACHINE_ARN": report_sm_arn, "GHG_STATE_MACHINE_ARN": ghg_sm_arn,
                 "SYNC_STATE_MACHINE_ARN": sync_sm_arn, "DATA_TOOLS_FUNCTION": "esg-data-tools", "OUTPUT_BUCKET": output_bucket, "PLATFORM_FUNCTION": PLATFORM_FN_NAME, "KB_ID": kb_id, "BANK_ID": "GENERIC_FI_001",
                 "MAX_CORRECTION_ATTEMPTS": "4", "SECTION_BUDGET_USD": "0.40", "RUN_BUDGET_USD": "1.50", "AGENT_MEMORY_TABLE": memory.table_name, "MAX_PIPELINE_RESTARTS": "1", "MODEL_ROUTING_PROFILE": routing_profile, "USAGE_TABLE": usage.table_name,
-                "VALIDATOR_CALIBRATION": "on", "PII_TOKEN_SECRET_ARN": pii_secret.secret_name, "PII_REQUIRE_SECRET": "1", "USAGE_TTL_DAYS": "14"})
+                "VALIDATOR_CALIBRATION": "on", "AGENT_MEMORY_ID": chat_memory.attr_memory_id, "PII_TOKEN_SECRET_ARN": pii_secret.secret_name, "PII_REQUIRE_SECRET": "1", "USAGE_TTL_DAYS": "14"})
         # The runtime creates its own log group as soon as it starts, so the group cannot be created here (AlreadyExists).
         # LogRetention is a custom resource that creates the group if needed and sets the 14-day retention either way.
         logs.LogRetention(self, "RuntimeLogsRetention", log_group_name=f"/aws/bedrock-agentcore/runtimes/{runtime.attr_agent_runtime_id}-DEFAULT", retention=two_weeks)

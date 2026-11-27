@@ -292,7 +292,8 @@ class SelfHealingSupervisor(DataSyncMixin):
             try:
                 gen = self.aws.lambda_invoke(self.s.section_gen_function, {
                     "section_id": tid, "framework": fw, "reporting_year": year, "metrics_json": metrics,
-                    "kb_id": inp.get("kb_id", self.s.kb_id), "execution_id": arn, "correction": correction})
+                    "kb_id": inp.get("kb_id", self.s.kb_id), "execution_id": arn, "correction": correction,
+                    "language": inp.get("language", "en")})
             except Exception as exc:  # noqa: BLE001
                 self.ledger.event(arn, doc, "regeneration_error", f"Generation of {tid} failed: {str(exc)[:200]}", section=tid)
                 history.append({"attempt": attempts, "strategy": strategy, "model": spec["model"], "outcome": "ERROR", "cost_usd": 0.0})

@@ -83,8 +83,13 @@ class ToolService:
 
     # ── run control ────────────────────────────────────────────────────────────────────────────
     def start(self, pipeline: str, reporting_year: int, framework: str | None = None, revenue_idr_billion: float | None = None,
-              subsidiary: str = "bank", auto_heal: bool = True, tables: list[str] | None = None, run_etl: bool = True) -> dict[str, Any]:
+              subsidiary: str = "bank", auto_heal: bool = True, tables: list[str] | None = None, run_etl: bool = True,
+              language: str | None = None, sections: list[str] | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {"reporting_year": reporting_year}
+        if language:
+            params["language"] = language
+        if sections:
+            params["sections"] = list(sections)
         if pipeline == "data_sync":
             params["tables"] = tables or None
             params["run_etl"] = run_etl

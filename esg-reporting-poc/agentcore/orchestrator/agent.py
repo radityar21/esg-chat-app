@@ -38,6 +38,13 @@ HOW YOU WORK
    when every table loaded. Include "Execution ID: <id>" in your reply. If the user is unsure whether data is current or
    why a sync failed, use inspect_source_database and get_etl_report, then explain: which table, which rule, who must act.
    Say clearly that a failed contract check never overwrites the last good data.
+9. REGULATORY FINDINGS. When asked to analyse a finding (id like A-067ED0), call analyze_regulatory_finding, then
+   explain in plain language: does it apply to the bank, which report sections and checklist items it touches, what data
+   exists (inspect_source_database, get_ghg_inventory, get_compliance_readiness) and what is missing, and concrete next
+   steps. If a template should change, read it (get_report_template), then propose_template_change with the full text,
+   keeping every {placeholder}; say clearly that an administrator must publish the draft in the Report Builder.
+10. REPORT OPTIONS. Reports can be generated in English (default) or Bahasa Indonesia, and with a subset of sections or a
+   saved configuration (list_report_configs). Only switch language or drop sections when the user asks.
 
 RULES
 - Never invent numbers, execution IDs, links or results. Only report what tools return.
@@ -47,7 +54,7 @@ RULES
 """
 
 
-def build_agent(service: ToolService, model_id: str | None = None) -> Any:
+def build_agent(service: ToolService, model_id: str | None = None, session_manager: Any = None) -> Any:
     from strands import Agent, tool  # lazy import
     from strands.models import BedrockModel
 
@@ -67,7 +74,8 @@ def build_agent(service: ToolService, model_id: str | None = None) -> Any:
 
     @tool
     def start_pipeline(pipeline: str, reporting_year: int, framework: str = "", revenue_idr_billion: float = 0.0,
-                       subsidiary: str = "bank", auto_heal: bool = True) -> str:
+                       subsidiary: str = "bank", auto_heal: bool = True, language: str = "en", sections: list[str] | None = None,
+                       config_id: str = "") -> str:
         """Start an inner Step Functions pipeline and begin supervising it.
 
         Args:
@@ -77,8 +85,17 @@ def build_agent(service: ToolService, model_id: str | None = None) -> Any:
             revenue_idr_billion: Revenue in IDR billion (esg_report only). 0 means use the default 92000.
             subsidiary: Subsidiary to attribute AI cost to: bank, syariah, finance or sekuritas.
             auto_heal: Regenerate sections that fail validation automatically. Default true.
+            language: Report language, 'en' (default) or 'id' (Bahasa Indonesia). Only change it when the user asks.
+            sections: Optional subset of the framework's section ids (see list_report_configs). Omit for all sections.
+            config_id: A saved Report Builder configuration to use (framework, sections, language). Overrides the others.
         """
-        return json.dumps(service.start(pipeline, reporting_year, framework or None, revenue_idr_billion or None, subsidiary, auto_heal))
+        if config_id:
+            cfg = service.platform("report_config_get", config_id=config_id)
+            if cfg.get("error"):
+                return json.dumps(cfg)
+            framework, language, sections = cfg["framework"], cfg.get("language", "en"), cfg.get("sections")
+        return json.dumps(service.start(pipeline, reporting_year, framework or None, revenue_idr_billion or None, subsidiary, auto_heal,
+                                        language=language, sections=sections))
 
     @tool
     def get_run_status(execution_id: str) -> str:
@@ -200,12 +217,52 @@ def build_agent(service: ToolService, model_id: str | None = None) -> Any:
         from model_routing import resolve
 
         _, mid = resolve("agent_explainer")
+    @tool
+    def analyze_regulatory_finding(alert_id: str) -> str:
+        """Gather what is needed to follow up one regulatory finding: the finding, the report templates it affects
+        (with excerpts) and the related PSPK checklist items. Use it when the user asks to analyse or act on a finding.
+
+        Args:
+            alert_id: The finding id, for example A-067ED0.
+        """
+        return json.dumps(service.platform("alert_context", alert_id=alert_id), default=str)
+
+    @tool
+    def propose_template_change(template_key: str, new_text: str, reason: str) -> str:
+        """Save a DRAFT of a report section template for an administrator to review and publish in the Report Builder.
+        Nothing changes in generated reports until it is published. Keep every {placeholder} of the current template.
+
+        Args:
+            template_key: Template id, for example governance, scope3_pcaf, governance_unified.
+            new_text: The FULL new template text (not a diff).
+            reason: One or two sentences: which finding or need this addresses.
+        """
+        return json.dumps(service.platform("template_propose", template_key=template_key, text=new_text, reason=reason), default=str)
+
+    @tool
+    def get_report_template(template_key: str) -> str:
+        """Read a report section template: published version, drafts and the placeholders it must keep.
+
+        Args:
+            template_key: Template id, for example scope1 or social_unified.
+        """
+        return json.dumps(service.platform("template_get", template_key=template_key), default=str)
+
+    @tool
+    def list_report_configs() -> str:
+        """Report Builder: the frameworks with their sections, languages, and the saved report configurations."""
+        cat = service.platform("report_catalog")
+        cfgs = service.platform("report_configs")
+        return json.dumps({"catalog": cat, "saved_configs": cfgs.get("configs", [])}, default=str)
+
     agent = Agent(
         model=BedrockModel(model_id=mid, temperature=0.1),
+        session_manager=session_manager,
         system_prompt=SYSTEM_PROMPT,
         tools=[plan_pipeline, list_capabilities, start_pipeline, get_run_status, explain_run, supervise_run, get_download_link,
                get_compliance_readiness, get_regulatory_alerts, get_ghg_inventory, run_climate_scenarios, get_ai_cost_summary,
-               sync_data_from_database, inspect_source_database, get_etl_report],
+               sync_data_from_database, inspect_source_database, get_etl_report,
+               analyze_regulatory_finding, propose_template_change, get_report_template, list_report_configs],
     )
     agent.esg_model_id = mid  # read by app.py to meter each turn
     return agent

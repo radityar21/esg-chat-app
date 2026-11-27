@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 import { sendChat, checkStatus } from '../api'
 import { useTheme } from '../ThemeContext'
-import { Send, Bot, User, Loader2, CheckCircle2, AlertCircle, Download, Sparkles, SquarePen } from 'lucide-react'
+import { Send, Bot, User, Loader2, CheckCircle2, AlertCircle, Download, Sparkles, SquarePen, History, Trash2 } from 'lucide-react'
 import RunProgress from '../components/RunProgress'
 import { currentUser } from '../lib/auth'
 import AgentActivity from '../components/AgentActivity'
 import { Pill } from '../components/ui'
-import { platformEnabled, submitAgent, waitAgent } from '../lib/platform'
+import { api, platformEnabled, submitAgent, waitAgent } from '../lib/platform'
 
 // AgentCore needs a session id of at least 33 characters. crypto.randomUUID only exists in secure contexts (https), so fall back to getRandomValues.
 function newSessionId() {
@@ -18,8 +18,10 @@ function newSessionId() {
 // The AgentCore session id is kept too, so the agent still has the context while its session is alive.
 const storeKey = () => `esg.chat.v1.${currentUser()?.email || 'demo'}`
 const loadChat = () => { try { return JSON.parse(sessionStorage.getItem(storeKey())) || {} } catch { return {} } }
+const EXEC_RE = /Execution ID:\s*`?([A-Za-z0-9_-]{8,})/i
+const usedSeeds = new Set() // a prompt sent from another page is asked once, even if the effect runs twice
 
-export default function Chat() {
+export default function Chat({ seed, onSeedUsed }) {
   const { isDark } = useTheme()
   const saved = useRef(loadChat()).current
   const [messages, setMessages] = useState(saved.messages || [])
@@ -33,7 +35,49 @@ export default function Chat() {
   }, [messages, sessionId, focusId, pending])
 
   function newChat() {
-    setMessages([]); setFocusId(null); setPending(null); setLoading(false); setSessionId(newSessionId())
+    const sid = newSessionId()
+    setMessages([]); setFocusId(null); setPending(null); setLoading(false); setSessionId(sid)
+    return sid
+  }
+
+  // Conversation history kept on the server (14 days): reopen an earlier chat and continue it.
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [history, setHistory] = useState({ status: 'idle', items: [], error: null })
+  async function openHistory() {
+    const next = !historyOpen
+    setHistoryOpen(next)
+    if (!next) return
+    setHistory((h) => ({ ...h, status: 'loading', error: null }))
+    try {
+      const r = await api('/agent/conversations')
+      setHistory({ status: 'live', items: r.conversations || [], days: r.retention_days, error: null })
+    } catch (e) { setHistory({ status: 'error', items: [], error: e.message }) }
+  }
+  async function openConversation(c) {
+    setHistoryOpen(false)
+    try {
+      const r = await api(`/agent/conversations/${encodeURIComponent(c.id)}`)
+      if (r.found === false) throw new Error('This conversation has expired.')
+      const msgs = []
+      for (const m of r.messages || []) {
+        msgs.push({ role: m.role, text: m.text })
+        const match = m.role === 'assistant' && m.text.match(EXEC_RE)
+        if (match) msgs.push({ role: 'system', type: 'run', executionId: match[1] })
+      }
+      setMessages(msgs); setSessionId(c.id); setPending(null); setLoading(false)
+      const last = [...msgs].reverse().find((m) => m.type === 'run')
+      setFocusId(last?.executionId || null)
+    } catch (e) {
+      setMessages((prev) => [...prev, { role: 'system', type: 'error', text: `Could not open the conversation: ${e.message}` }])
+    }
+  }
+  async function deleteConversation(c) {
+    if (!window.confirm(`Delete "${c.title || 'this conversation'}"?`)) return
+    try {
+      await api(`/agent/conversations/${encodeURIComponent(c.id)}/delete`, { method: 'POST', body: {} })
+      setHistory((h) => ({ ...h, items: h.items.filter((x) => x.id !== c.id) }))
+      if (c.id === sessionId) newChat()
+    } catch (e) { setHistory((h) => ({ ...h, error: e.message })) }
   }
   const [polling, setPolling] = useState(false)
   const [executionId, setExecutionId] = useState(null)
@@ -82,16 +126,20 @@ export default function Chat() {
     if (!input.trim() || loading) return
     const userMsg = input.trim()
     setInput('')
+    await ask(userMsg, sessionId)
+  }
+
+  async function ask(userMsg, sid) {
     setMessages(prev => [...prev, { role: 'user', text: userMsg }])
     setLoading(true)
     try {
       let data
       if (platformEnabled) {
-        const job = await submitAgent(userMsg, sessionId)
+        const job = await submitAgent(userMsg, sid)
         setPending({ jobId: job.job_id })
         data = await waitAgent(job.job_id)
       } else {
-        data = await sendChat(userMsg, sessionId)
+        data = await sendChat(userMsg, sid)
       }
       handleReply(data)
     } catch (e) {
@@ -113,11 +161,21 @@ export default function Chat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // A prompt handed over by another page (for example "Analyze with AI" on a regulatory finding): new chat, ask once.
+  useEffect(() => {
+    if (!seed?.prompt || usedSeeds.has(seed.at)) return
+    usedSeeds.add(seed.at)
+    onSeedUsed?.()
+    if (loading) { setInput(seed.prompt); return }  // a turn is still running: let the user send it afterwards
+    ask(seed.prompt, newChat())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seed])
+
   function handleReply(data) {
       const reply = data.response || data.message || JSON.stringify(data)
       setMessages(prev => [...prev, { role: 'assistant', text: reply }])
       // Detect execution ID for polling
-      const match = reply.match(/Execution ID:\s*`?([A-Za-z0-9_-]{8,})/i)
+      const match = reply.match(EXEC_RE)
       if (match) {
         setFocusId(match[1])
         if (platformEnabled) {
@@ -142,7 +200,7 @@ export default function Chat() {
     <div className="flex h-full animate-fade-in">
     <div className="flex flex-col h-full flex-1 min-w-0">
       {/* Header */}
-      <div className="relative overflow-hidden px-8 py-5 border-b border-white/[0.06]">
+      <div className="relative z-20 px-8 py-5 border-b border-white/[0.06]">
         <img src="/img/city-night.jpg" alt="" className="absolute inset-0 w-full h-full object-cover opacity-25" style={{ objectPosition: 'center 40%' }} />
         <div className="absolute inset-0 bg-gradient-to-r from-dark-900 via-dark-900/90 to-dark-900/60" />
         <div className="relative flex items-center gap-4">
@@ -154,6 +212,28 @@ export default function Chat() {
             <h2 className="text-xl font-display font-bold text-white tracking-tight">Ask, generate, and let the agent fix what fails</h2>
           </div>
           {platformEnabled ? <Pill tone="green">AgentCore Runtime</Pill> : <Pill tone="slate">Bedrock Agent (legacy)</Pill>}
+          {platformEnabled && (
+            <div className="relative">
+              <button onClick={openHistory} disabled={loading} title="Earlier conversations" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-xs text-white/75 hover:bg-white/10 disabled:opacity-40"><History size={13} />History</button>
+              {historyOpen && (
+                <div className="absolute right-0 top-full mt-2 w-[360px] max-h-[420px] overflow-y-auto rounded-2xl border border-white/10 bg-dark-900/95 backdrop-blur shadow-2xl z-30 p-2">
+                  <div className="px-2 py-1.5 text-[10px] text-white/35">Kept for {history.days || 14} days · personal data is masked</div>
+                  {history.status === 'loading' && <div className="px-3 py-4 text-xs text-white/45 flex items-center gap-2"><Loader2 size={12} className="animate-spin" />Loading…</div>}
+                  {history.error && <div className="px-3 py-2 text-xs text-esg-red">{history.error}</div>}
+                  {history.status === 'live' && history.items.length === 0 && <div className="px-3 py-4 text-xs text-white/40">No earlier conversations.</div>}
+                  {history.items.map((c) => (
+                    <div key={c.id} className={`group flex items-center gap-2 rounded-xl px-3 py-2 ${c.id === sessionId ? 'bg-accent-blue/10' : 'hover:bg-white/[0.05]'}`}>
+                      <button onClick={() => openConversation(c)} className="flex-1 min-w-0 text-left">
+                        <div className="text-xs text-white/85 truncate">{c.title || 'Untitled'}</div>
+                        <div className="text-[10px] text-white/35">{new Date(c.updated_at).toLocaleString()}</div>
+                      </button>
+                      <button onClick={() => deleteConversation(c)} title="Delete" className="text-white/25 hover:text-esg-red opacity-0 group-hover:opacity-100"><Trash2 size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <button onClick={newChat} disabled={loading} title="Start a new conversation" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-xs text-white/75 hover:bg-white/10 disabled:opacity-40"><SquarePen size={13} />New chat</button>
         </div>
       </div>

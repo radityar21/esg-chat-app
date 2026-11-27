@@ -14,25 +14,21 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import sys
+from pathlib import Path
+
 from .config import Settings
+
+for _p in (Path(__file__).resolve().parents[1] / "_shared", Path(__file__).resolve().parents[2] / "lambda" / "_shared"):
+    if _p.exists() and str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
+import report_catalog as catalog  # noqa: E402
 
 SYNC_TABLES = ("energy_consumption", "loan_portfolio", "hr_metrics", "scope3_operational_activity")
 FRAMEWORKS = ("GRI_305", "IFRS_S2", "CSRD_ESRS_E1", "OJK_PSPK", "MULTI_FRAMEWORK")
 
-SECTION_TEMPLATES: dict[str, list[dict[str, str]]] = {
-    "GRI_305": [{"template_id": t, "framework": "NONE" if t == "summary" else "GRI_305"} for t in
-                ("summary", "scope1", "scope2", "scope3_pcaf", "intensity", "reduction", "social")],
-    "IFRS_S2": [{"template_id": t, "framework": "IFRS_S2"} for t in
-                ("summary", "governance", "scope1", "scope2", "scope3_pcaf", "intensity", "targets", "social")],
-    "CSRD_ESRS_E1": [{"template_id": t, "framework": "CSRD_ESRS_E1"} for t in
-                     ("summary", "governance", "targets", "scope1", "scope2", "scope3_pcaf", "intensity", "reduction", "social")],
-    "OJK_PSPK": [{"template_id": t, "framework": "OJK_PSPK"} for t in
-                 ("summary", "governance", "scope1", "scope2", "scope3_pcaf", "intensity", "reduction", "social")],
-    "MULTI_FRAMEWORK": [
-        *[{"template_id": f"{t}_unified", "framework": "MULTI_FRAMEWORK"} for t in
-          ("scope1", "scope2", "scope3_pcaf", "intensity", "reduction", "social", "governance", "targets", "scenario")],
-        {"template_id": "summary", "framework": "NONE"},
-    ],
+SECTION_TEMPLATES: dict[str, list[dict[str, str]]] = {  # default (all sections, English) per framework
+    fw: [{"template_id": t["template_id"], "framework": t["framework"]} for t in catalog.section_templates(fw)] for fw in catalog.FRAMEWORKS
 }
 
 PIPELINES: dict[str, dict[str, Any]] = {
@@ -40,7 +36,7 @@ PIPELINES: dict[str, dict[str, Any]] = {
         "title": "ESG report generation",
         "description": "Generates a validated DOCX sustainability report for one framework or all four (multi-framework).",
         "eta_minutes": {"single": "10-20", "multi": "20-40"},
-        "params": ["reporting_year", "framework", "revenue_idr_billion"],
+        "params": ["reporting_year", "framework", "revenue_idr_billion"],  # optional: sections (subset), language (en | id)
     },
     "data_sync": {
         "title": "Data sync from the source database",
@@ -155,10 +151,11 @@ def build_input(pipeline: str, params: dict[str, Any], settings: Settings) -> di
         revenue = float(params.get("revenue_idr_billion") or 92000.0)
         if revenue <= 0:
             raise ValueError("Revenue must be positive (IDR billion).")
+        language = str(params.get("language") or catalog.DEFAULT_LANGUAGE)
         return {
             "reporting_year": year, "framework": fw, "bank_id": settings.bank_id,
-            "output_bucket": settings.output_bucket, "revenue_idr_billion": revenue,
-            "kb_id": settings.kb_id, "section_templates": SECTION_TEMPLATES[fw],
+            "output_bucket": settings.output_bucket, "revenue_idr_billion": revenue, "language": language,
+            "kb_id": settings.kb_id, "section_templates": catalog.section_templates(fw, params.get("sections"), language),
         }
     if pipeline == "ghg_inventory":
         return {"reporting_year": year, "bank_id": settings.bank_id}

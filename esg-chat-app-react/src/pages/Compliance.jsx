@@ -1,10 +1,10 @@
 import { useState, useMemo, useRef } from 'react'
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer } from 'recharts'
-import { CheckCircle2, CircleDot, XCircle, HelpCircle, ScanSearch, FileDiff, Wrench, Globe2 } from 'lucide-react'
+import { CheckCircle2, CircleDot, XCircle, HelpCircle, ScanSearch, FileDiff, Wrench, Globe2, Sparkles, History } from 'lucide-react'
 import { CHECKLIST, PILLARS, pillarScores, score, SOURCES, ALERTS_BASE, ALERT_NEW } from '../data/compliance'
 import { PageHeader, Panel, Gauge, Pill, Button, Tabs, C } from '../components/ui'
 import SourceBadge from '../components/SourceBadge'
-import { runScan, useLive, platformEnabled } from '../lib/platform'
+import { api, runScan, useLive, platformEnabled } from '../lib/platform'
 import { authEnabled, currentUser } from '../lib/auth'
 
 const statusMeta = {
@@ -14,8 +14,15 @@ const statusMeta = {
   unknown: { icon: HelpCircle, color: 'text-white/40', label: 'Not checked', tone: 'slate' },
 }
 const sev = { high: 'red', medium: 'amber', low: 'blue' }
+const FINDING = {
+  new: { label: 'New', tone: 'red' },
+  reviewed: { label: 'Reviewed', tone: 'blue' },
+  actioned: { label: 'Actioned', tone: 'green' },
+  not_relevant: { label: 'Not relevant', tone: 'slate' },
+}
+const analyzePrompt = (a) => `Analyze regulatory finding ${a.id} ("${a.title}"): does it apply to us, which report sections, checklist items and data are affected, and propose concrete changes.`
 
-export default function Compliance() {
+export default function Compliance({ onNavigate }) {
   const [tab, setTab] = useState('gap')
   const [fixed, setFixed] = useState(new Set())
   const [pillar, setPillar] = useState('all')
@@ -57,7 +64,23 @@ export default function Compliance() {
     }
   }
   const liveAlerts = alertsLive.status === 'live' ? alertsLive.data.alerts : null
-  const alerts = liveAlerts ?? (scanState === 'done' ? [ALERT_NEW, ...ALERTS_BASE] : ALERTS_BASE)
+  const allAlerts = liveAlerts ?? (scanState === 'done' ? [ALERT_NEW, ...ALERTS_BASE] : ALERTS_BASE)
+  const [findingFilter, setFindingFilter] = useState('relevant')
+  const [statusError, setStatusError] = useState(null)
+  const isOpen = (a) => a.relevant !== false && (a.status || 'new') !== 'actioned' && a.status !== 'not_relevant'
+  const filters = {
+    relevant: (a) => a.relevant !== false && a.status !== 'not_relevant',
+    new: (a) => (a.status || 'new') === 'new',
+    open: isOpen,
+    all: () => true,
+  }
+  const alerts = allAlerts.filter(filters[findingFilter])
+  const scans = alertsLive.data?.scans || []
+  const counts = alertsLive.data?.counts
+  const setStatus = async (a, status) => {
+    setStatusError(null)
+    try { await api('/compliance/alerts/status', { method: 'POST', body: { alert_id: a.id, status } }); alertsLive.reload() } catch (e) { setStatusError(`${a.id}: ${e.message}`) }
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-10 animate-fade-in">
@@ -179,21 +202,55 @@ export default function Compliance() {
             {scanError && <div className="mt-4 text-xs text-esg-red">Scan failed: {scanError}</div>}
             {scanResult && <div className="mt-4 text-xs text-white/60">{scanResult.new} new item(s) found{scanResult.errors?.length ? `, ${scanResult.errors.length} source(s) unreachable` : ''}.</div>}
             <div className="mt-5 text-[11px] text-white/35 leading-relaxed">Detected changes are classified by an LLM against the section map of your report templates, then routed to the owning team.</div>
+            {platformEnabled && (
+              <div className="mt-6">
+                <div className="eyebrow mb-2 flex items-center gap-1.5"><History size={12} />Scan history</div>
+                {scans.length === 0 ? <div className="text-xs text-white/35">No scans recorded yet.</div> : (
+                  <ul className="space-y-1.5">
+                    {scans.map((sc) => (
+                      <li key={sc.at} className="rounded-lg bg-white/[0.03] px-3 py-2 text-[11px] flex items-center justify-between gap-2">
+                        <span className="text-white/65">{new Date(sc.at).toLocaleString()}</span>
+                        <span className="text-white/45">{sc.new} new · {sc.relevant} relevant{sc.errors ? <span className="text-esg-amber"> · {sc.errors} unreachable</span> : ''}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </Panel>
 
-          <Panel className="col-span-8" title="Change alerts" subtitle="Impact mapped to report sections and checklist items">
+          <Panel className="col-span-8" title="Regulatory findings" subtitle="Every finding is kept. Impact is mapped to report sections and checklist items; follow up each one with the AI."
+            right={<Tabs value={findingFilter} onChange={setFindingFilter} tabs={[
+              { id: 'relevant', label: 'Relevant' },
+              { id: 'new', label: `New${counts ? ` · ${counts.new}` : ''}` },
+              { id: 'open', label: 'Open' },
+              { id: 'all', label: `All · ${allAlerts.length}` },
+            ]} />}>
+            {statusError && <div className="mb-3 text-xs text-esg-red">Could not update {statusError}</div>}
+            {alerts.length === 0 && <div className="text-sm text-white/40 py-6 text-center">No findings in this view.</div>}
             <div className="space-y-3">
               {alerts.map((a) => (
                 <div key={a.id} className={`rounded-xl border p-4 ${a.isNew ? 'border-esg-red/40 bg-esg-red/[0.06] ticker-in' : 'border-white/[0.07] bg-white/[0.025]'}`}>
                   <div className="flex items-center gap-2 mb-1.5">
                     <Pill tone={sev[a.severity]}>{a.severity}</Pill>
                     {a.isNew && <Pill tone="red">NEW</Pill>}
-                    <span className="text-[11px] text-white/40">{a.source} · {a.date} · {a.id}</span>
+                    {liveAlerts && <Pill tone={FINDING[a.status || 'new']?.tone}>{FINDING[a.status || 'new']?.label}</Pill>}
+                    <span className="text-[11px] text-white/40 flex-1">{a.source} · {a.date} · {a.id}</span>
+                    {liveAlerts && canScan && (
+                      <select value={a.status || 'new'} onChange={(e) => setStatus(a, e.target.value)} className="rounded-lg bg-white/[0.05] border border-white/10 px-2 py-1 text-[11px] text-white/80">
+                        {Object.entries(FINDING).map(([k, v]) => <option key={k} value={k} className="bg-dark-900">{v.label}</option>)}
+                      </select>
+                    )}
                   </div>
                   <div className="text-sm font-medium text-white leading-snug">{a.url ? <a href={a.url} target="_blank" rel="noreferrer" className="hover:underline">{a.title}</a> : a.title}</div>
                   <div className="text-xs text-white/50 mt-1.5">Impacts: {(a.impact || []).join(' · ')} {a.checklist && <span className="text-white/25">| checklist {a.checklist}</span>}</div>
                   <div className="text-xs text-white/70 mt-1">Suggested: {a.action}</div>
-                  {a.isNew && a.templateBefore && (
+                  {a.relevance && <div className={`text-[11px] mt-1 ${a.relevant === false ? 'text-white/35' : 'text-accent-teal/80'}`}>{a.relevant === false ? 'Not relevant: ' : 'Why it matters: '}{a.relevance}</div>}
+                  {a.status_by && <div className="text-[10px] text-white/30 mt-1">{FINDING[a.status]?.label} by {a.status_by} on {a.status_at}{a.status_note ? ` · ${a.status_note}` : ''}</div>}
+                  {onNavigate && (
+                    <div className="mt-3"><Button variant="ghost" icon={Sparkles} onClick={() => onNavigate('chat', { prompt: analyzePrompt(a) })}>Analyze with AI</Button></div>
+                  )}
+                  {!liveAlerts && a.isNew && a.templateBefore && (
                     <div className="mt-3">
                       <Button variant="ghost" icon={FileDiff} onClick={() => setShowDiff(!showDiff)}>{showDiff ? 'Hide' : 'Preview'} template update</Button>
                       {showDiff && (

@@ -10,19 +10,22 @@ import GhgInventory from './pages/GhgInventory'
 import Chat from './pages/Chat'
 import Reports from './pages/Reports'
 import Reference from './pages/Reference'
+import ReportBuilder from './pages/ReportBuilder'
 import AuthGate from './components/AuthGate'
 
 const ORDER = NAV.flatMap((g) => g.items.map((i) => i.id))
 
 function AppContent() {
-  const [page, setPage] = useState('home')
+  const [page, setPageRaw] = useState('home')
+  const [chatSeed, setChatSeed] = useState(null) // a prompt another page asks the assistant (for example "analyse finding A-1")
+  const setPage = (p, opts = {}) => { if (opts.prompt) setChatSeed({ prompt: opts.prompt, at: Date.now() }); setPageRaw(p) }
 
   // Presenter shortcuts: keys 1-9 jump between pages
   useEffect(() => {
     const onKey = (e) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.metaKey || e.ctrlKey) return
       const n = Number(e.key)
-      if (n >= 1 && n <= ORDER.length) setPage(ORDER[n - 1])
+      if (n >= 1 && n <= ORDER.length) setPageRaw(ORDER[n - 1])
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -30,12 +33,13 @@ function AppContent() {
 
   const pages = {
     home: <Home onNavigate={setPage} />,
-    compliance: <Compliance />,
+    compliance: <Compliance onNavigate={setPage} />,
     frameworks: <Frameworks />,
     portfolio: <Portfolio />,
     governance: <Governance />,
     ghg: <GhgInventory />,
-    chat: <Chat />,
+    chat: <Chat seed={chatSeed} onSeedUsed={() => setChatSeed(null)} />,
+    builder: <ReportBuilder />,
     reports: <Reports />,
     reference: <Reference />,
   }

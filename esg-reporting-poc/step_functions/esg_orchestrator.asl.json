@@ -206,7 +206,8 @@
               "reporting_year.$": "$.reporting_year",
               "metrics_json.$": "$.data_input",
               "kb_id.$": "$.kb_id",
-              "execution_id.$": "$.execution_id"
+              "execution_id.$": "$.execution_id",
+              "template_config.$": "$.template_config"
             },
             "ResultPath": "$.section_result",
             "Next": "CheckFirstResult",
@@ -297,7 +298,8 @@
               "reporting_year.$": "$.reporting_year",
               "metrics_json.$": "$.data_input",
               "kb_id.$": "$.kb_id",
-              "execution_id.$": "$.execution_id"
+              "execution_id.$": "$.execution_id",
+              "template_config.$": "$.template_config"
             },
             "ResultPath": "$.section_result",
             "Next": "RetryValidation"
@@ -391,7 +393,8 @@
               "reporting_year.$": "$.reporting_year",
               "metrics_json.$": "$.data_input",
               "kb_id.$": "$.kb_id",
-              "execution_id.$": "$.execution_id"
+              "execution_id.$": "$.execution_id",
+              "template_config.$": "$.template_config"
             },
             "ResultPath": "$.section_result",
             "Next": "CheckRetryResult",

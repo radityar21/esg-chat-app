@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -41,12 +42,33 @@ service = ToolService(RealAws(settings.region), settings, runner=BackgroundRunne
 _agents: dict[str, Any] = {}
 
 
-def _agent_for(session_id: str) -> Any:
-    if session_id not in _agents:
+MEMORY_ID = os.environ.get("AGENT_MEMORY_ID", "")
+_ACTOR = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def _session_manager(session_id: str, user: str) -> Any:
+    """AgentCore Memory: the conversation is stored per user (actor) and conversation (session), so it continues with
+    full context even after this runtime session ends. Without AGENT_MEMORY_ID the agent keeps context in this session only."""
+    if not MEMORY_ID or not user:
+        return None
+    try:
+        from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
+        from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+
+        cfg = AgentCoreMemoryConfig(memory_id=MEMORY_ID, session_id=session_id, actor_id=_ACTOR.sub("-", user)[:100])
+        return AgentCoreMemorySessionManager(cfg, region_name=settings.region)
+    except Exception as exc:  # noqa: BLE001 - memory is an enhancement, never a reason to fail a chat
+        log.warning("AgentCore Memory unavailable, continuing without it: %s", exc)
+        return None
+
+
+def _agent_for(session_id: str, user: str = "") -> Any:
+    key = f"{user}|{session_id}"  # one agent per user and conversation, even if two users reused a session id
+    if key not in _agents:
         from orchestrator.agent import build_agent  # imported on first chat so supervise-only calls start fast
 
-        _agents[session_id] = build_agent(service)
-    return _agents[session_id]
+        _agents[key] = build_agent(service, session_manager=_session_manager(session_id, user))
+    return _agents[key]
 
 
 def _meter(agent: Any, result: Any, user: str, latency_ms: int) -> None:
@@ -77,6 +99,9 @@ def invoke(payload: dict[str, Any], context: Any = None) -> dict[str, Any]:
         return service.status(payload["execution_id"])
     if mode == "ledger":
         return service.ledger.load(service.supervisor._arn(payload["execution_id"]))
+    if mode == "start":  # Report Builder: start and supervise a pipeline with an explicit configuration
+        return service.start(str(payload.get("pipeline", "esg_report")), int(payload["reporting_year"]), payload.get("framework"),
+                             None, "bank", True, language=payload.get("language"), sections=payload.get("sections"))
     if mode != "chat":
         return {"error": f"unknown mode {mode!r}"}
 
@@ -87,7 +112,7 @@ def invoke(payload: dict[str, Any], context: Any = None) -> dict[str, Any]:
     if findings:
         log.warning("masked %d personal-data item(s) in a user message", len(findings))
         masked += "\n\n(Personal data in this message was replaced by tokens before processing.)"
-    agent = _agent_for(session_id)
+    agent = _agent_for(session_id, str(payload.get("user") or ""))
     t0 = time.time()
     result = agent(masked)
     _meter(agent, result, str(payload.get("user") or ""), int((time.time() - t0) * 1000))
