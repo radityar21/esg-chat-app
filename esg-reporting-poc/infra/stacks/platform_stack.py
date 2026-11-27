@@ -104,6 +104,9 @@ class EsgPlatformStack(Stack):
         usage = ddb.Table(self, "UsageTable", table_name="esg-llm-usage", partition_key=ddb.Attribute(name="day", type=ddb.AttributeType.STRING),
                           sort_key=ddb.Attribute(name="sk", type=ddb.AttributeType.STRING), billing_mode=ddb.BillingMode.PAY_PER_REQUEST,
                           removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")  # 14-day usage history by design
+        # Learned success rates of correction strategies. Tiny, and valuable over time, so it is kept (no TTL).
+        memory = ddb.Table(self, "AgentMemoryTable", table_name="esg-agent-memory", partition_key=ddb.Attribute(name="key", type=ddb.AttributeType.STRING),
+                           billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.RETAIN, point_in_time_recovery=True)
         jobs = ddb.Table(self, "ChatJobsTable", table_name="esg-chat-jobs", partition_key=ddb.Attribute(name="job_id", type=ddb.AttributeType.STRING),
                          billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")
 
@@ -197,11 +200,12 @@ class EsgPlatformStack(Stack):
             environment_variables={
                 "AWS_REGION": region, "AWS_ACCOUNT_ID": acct, "REPORT_STATE_MACHINE_ARN": report_sm_arn, "GHG_STATE_MACHINE_ARN": ghg_sm_arn,
                 "OUTPUT_BUCKET": output_bucket, "PLATFORM_FUNCTION": PLATFORM_FN_NAME, "KB_ID": "WVREXI1LEI", "BANK_ID": "GENERIC_FI_001",
-                "MAX_CORRECTION_ATTEMPTS": "2", "MAX_PIPELINE_RESTARTS": "1", "MODEL_ROUTING_PROFILE": routing_profile, "USAGE_TABLE": usage.table_name,
+                "MAX_CORRECTION_ATTEMPTS": "4", "SECTION_BUDGET_USD": "0.40", "RUN_BUDGET_USD": "1.50", "AGENT_MEMORY_TABLE": memory.table_name, "MAX_PIPELINE_RESTARTS": "1", "MODEL_ROUTING_PROFILE": routing_profile, "USAGE_TABLE": usage.table_name,
                 "VALIDATOR_CALIBRATION": "on", "PII_TOKEN_SECRET_ARN": pii_secret.secret_arn, "PII_REQUIRE_SECRET": "1", "USAGE_TTL_DAYS": "14"})
         # AgentCore creates this group on first use without retention; creating it first applies the 14-day policy
         logs.LogGroup(self, "RuntimeLogs", log_group_name=f"/aws/bedrock-agentcore/runtimes/{runtime.attr_agent_runtime_id}-DEFAULT", retention=two_weeks, removal_policy=RemovalPolicy.DESTROY)
         rt_role.add_to_policy(iam.PolicyStatement(actions=["dynamodb:PutItem"], resources=[usage.table_arn]))
+        memory.grant_read_write_data(rt_role)
         runtime.node.add_dependency(rt_role)
 
         # ── wire the Lambda to the runtime (done with an escape hatch to avoid a circular reference) ──
@@ -228,5 +232,6 @@ class EsgPlatformStack(Stack):
         CfnOutput(self, "AgentRuntimeArn", value=runtime.attr_agent_runtime_arn)
         CfnOutput(self, "GhgStateMachineArn", value=ghg_sm_arn)
         CfnOutput(self, "UsageTableName", value=usage.table_name)
+        CfnOutput(self, "AgentMemoryTableName", value=memory.table_name)
         CfnOutput(self, "PipelineExtrasPolicyArn", value=meter_policy.managed_policy_arn, description="Attach to the existing esg-section-gen role")
         CfnOutput(self, "PiiSecretArn", value=pii_secret.secret_arn, description="PII_TOKEN_SECRET_ARN for the existing esg-section-gen Lambda")

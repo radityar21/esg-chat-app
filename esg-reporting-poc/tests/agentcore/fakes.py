@@ -67,3 +67,36 @@ class FakeAws:
 
     def s3_presign(self, bucket: str, key: str, expires: int = 3600) -> str:
         return f"https://signed.example/{bucket}/{key}"
+
+
+# ── strategy memory and critic (added with the adaptive loop) ─────────────────────────────────────
+def _memory_stats(self, keys):
+    return {k: dict(self.memory[k]) for k in keys if k in self.memory}
+
+
+def _memory_record(self, key, success, cost):
+    m = self.memory.setdefault(key, {"trials": 0, "successes": 0, "cost": 0.0})
+    m["trials"] += 1
+    m["successes"] += 1 if success else 0
+    m["cost"] += cost
+
+
+def _llm_hint(self, prompt):
+    self.hints.append(prompt)
+    return self.hint_reply
+
+
+FakeAws.memory_stats = _memory_stats
+FakeAws.memory_record = _memory_record
+FakeAws.llm_hint = _llm_hint
+_orig_init = FakeAws.__init__
+
+
+def _init(self):
+    _orig_init(self)
+    self.memory = {}
+    self.hints = []
+    self.hint_reply = "Replace first-person wording with the third person."
+
+
+FakeAws.__init__ = _init

@@ -55,10 +55,11 @@ from botocore.config import Config as BotoConfig
 # Shared modules are packaged next to this file (see scripts/package_lambdas.sh).
 # If an older deployment package lacks them, fall back to the previous behaviour.
 try:
-    from model_routing import resolve as _resolve_model, task_for_section as _task_for_section
+    from model_routing import MODELS as _MODELS, resolve as _resolve_model, task_for_section as _task_for_section
     from pii_guard import mask_payload as _mask_payload
     from usage_meter import record as _record_usage
 except ImportError:  # pragma: no cover
+    _MODELS = None
     _resolve_model = None
     _task_for_section = None
     _mask_payload = None
@@ -472,6 +473,10 @@ Return ONLY valid JSON per the output contract.
     if _resolve_model and _task_for_section:
         routed_task = "corrector" if correction else _task_for_section(template_key)
         _alias, model_id = _resolve_model(routed_task)
+        # The adaptive self-correction loop may pick the model explicitly (cheap for format fixes, strong for numeric ones)
+        _forced = (correction or {}).get("model")
+        if _forced and _MODELS and _forced in _MODELS:
+            model_id = _MODELS[_forced]["id"]
     logger.info(f"Invoking model: {model_id} (task={routed_task}, correction={bool(correction)})")
 
     request_body: dict[str, Any] = {
@@ -590,6 +595,12 @@ def _build_correction_block(correction: dict | None) -> str:
     ]
     for item in correction.get("instructions", [])[:15]:
         lines.append(f"- {item}")
+    allowed = correction.get("allowed_values") or []
+    if allowed:
+        lines.append("- The ONLY numbers you may write are these values from DATA INPUT (copy them exactly, never derive new ones): "
+                     + ", ".join(str(v) for v in allowed[:80]))
+    if correction.get("minimal"):
+        lines.append("- SAFE MODE: write at most 3 short paragraphs. Put every figure in the tables and key_metrics, and do not repeat figures in the narrative text.")
     offending = correction.get("offending_values") or []
     if offending:
         lines.append("- These numbers could not be traced to DATA INPUT and must be removed or replaced by values that exist in DATA INPUT: "

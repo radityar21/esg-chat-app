@@ -19,6 +19,8 @@ const EV = {
   escalated: { icon: AlertTriangle, color: 'text-esg-amber' },
 }
 const TONE = { completed: 'green', running: 'blue', escalated: 'amber', failed: 'red', pending: 'slate' }
+const NOTE = { info: { tone: 'border-esg-green/25 bg-esg-green/[0.05]', label: 'Repaired', c: 'text-esg-green' }, review: { tone: 'border-esg-amber/30 bg-esg-amber/[0.06]', label: 'Needs review', c: 'text-esg-amber' }, action: { tone: 'border-esg-red/30 bg-esg-red/[0.06]', label: 'Action needed', c: 'text-esg-red' } }
+const STRAT = { fix_cheap: 'Fast model', fix_strong: 'Stronger model', grounded_cheap: 'Source numbers only · fast', grounded_strong: 'Source numbers only · strong', critic_strong: 'AI hint · strong', minimal_safe: 'Safe short text' }
 const timeOf = (iso) => (iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '')
 
 /** Live view of what the AgentCore orchestrator did for each report run (reads the S3 ledger through the platform API). */
@@ -76,6 +78,18 @@ export default function AgentActivity({ focusId, compact = false }) {
               {sections.map(([tid, s]) => <span key={tid} title={(s.explanations || []).join(' ')} className={`text-[10px] px-2 py-0.5 rounded-md border ${s.status === 'healed' ? 'border-esg-green/30 text-esg-green' : s.status === 'ok' ? 'border-white/10 text-white/40' : 'border-esg-amber/30 text-esg-amber'}`}>{tid}{s.attempts ? ` · ${s.attempts}x` : ''}</span>)}
             </div>
           )}
+          {sections.some(([, s]) => (s.strategies || []).length > 0) && (
+            <div className="mb-4 space-y-1.5">
+              {sections.filter(([, s]) => (s.strategies || []).length > 0).map(([tid, s]) => (
+                <div key={tid} className="text-[11px] text-white/55 leading-relaxed">
+                  <span className="text-white/80">{tid}</span>
+                  {s.strategies.map((h, i) => (
+                    <span key={i}> {i > 0 ? '→' : ':'} <span className={h.outcome === 'PASS' || h.outcome === 'WARN' ? 'text-esg-green' : 'text-white/55'}>{STRAT[h.strategy] || h.strategy}{h.outcome ? ` (${h.outcome.toLowerCase()})` : ''}</span></span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
           <ol className="relative border-l border-white/10 ml-2 space-y-3">
             {(ledger.events || []).slice(-14).map((e, i) => {
               const m = EV[e.type] || { icon: RefreshCw, color: 'text-white/40' }
@@ -88,6 +102,23 @@ export default function AgentActivity({ focusId, compact = false }) {
               )
             })}
           </ol>
+          {ledger.result?.budget && <div className="mt-3 text-[10px] text-white/35">Repair spend ${Number(ledger.result.budget.spent_usd).toFixed(3)} of ${Number(ledger.result.budget.limit_usd).toFixed(2)} budget</div>}
+          {(ledger.result?.notes || []).length > 0 && (
+            <div className="mt-4">
+              <div className="eyebrow mb-2">Review notes</div>
+              <div className="space-y-2">
+                {ledger.result.notes.map((n, i) => {
+                  const m = NOTE[n.level] || NOTE.info
+                  return (
+                    <div key={i} className={`rounded-xl border px-3 py-2 ${m.tone}`}>
+                      <div className="flex items-center gap-2 mb-0.5"><span className={`text-[10px] font-semibold uppercase tracking-wide ${m.c}`}>{m.label}</span><span className="text-[11px] text-white/70">{n.section}</span></div>
+                      <div className="text-[11px] text-white/60 leading-relaxed">{n.text}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           {ledger.result?.download_url && (
             <div className="flex gap-2 mt-4">
               <a href={ledger.result.download_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent-blue/10 text-accent-blue text-xs"><Download size={12} /> DOCX</a>

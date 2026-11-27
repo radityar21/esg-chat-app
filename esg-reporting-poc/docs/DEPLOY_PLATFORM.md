@@ -29,7 +29,7 @@ cd ..
 aws cloudformation describe-stacks --stack-name EsgPlatformStack --query "Stacks[0].Outputs" --output table
 ```
 The stack creates: Cognito user pool (admin-created users, optional TOTP MFA), JWT-protected HTTP API, platform and trigger
-Lambdas, usage and chat-job tables (14-day TTL), PII secret, Bedrock guardrail, GHG state machine, AgentCore runtime,
+Lambdas, usage and chat-job tables (14-day TTL), the strategy-memory table, PII secret, Bedrock guardrail, GHG state machine, AgentCore runtime,
 EventBridge rules and a dead-letter queue.
 
 ## 3. Existing pipeline Lambdas, policies, lifecycle
@@ -87,6 +87,7 @@ ask it to generate a GRI 305 report for 2024 and follow the timeline in Agent ac
 - API: JWT authorizer on every route except `/health`; roles from the `admin` / `viewer` groups; stage throttle 30 req/s, burst 60.
 - Secrets: PII pseudonym key in Secrets Manager (`esg/pii-token-secret`). Do not rotate it casually: existing tokens would change.
 - IAM: Bedrock access is limited to the Claude 4.5 models; runtime S3 write is limited to the output bucket.
+- Adaptive repair: budgets and ceiling are runtime environment variables (`SECTION_BUDGET_USD`, `RUN_BUDGET_USD`, `MAX_CORRECTION_ATTEMPTS`); the learned strategy statistics (`esg-agent-memory`) are kept (no TTL, retained on stack deletion).
 - Retention: Lambda/runtime logs 14 days; usage and chat-job tables 14 days (TTL); ledger/executions/cache expire after 14 days.
   Generated reports and compliance attestations/alerts are NOT expired.
 - Chat prompts are never stored; only the answer is kept for 14 days.

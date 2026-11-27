@@ -137,6 +137,10 @@ class ToolService:
             out["needs_human"] = res["unresolved"]
         if res.get("healed"):
             out["auto_repaired"] = res["healed"]
+        if res.get("notes"):
+            out["review_notes"] = res["notes"]  # plain-language notes also shown in the UI
+        if doc.get("budget"):
+            out["repair_budget"] = doc["budget"]
         return out
 
     @_safe

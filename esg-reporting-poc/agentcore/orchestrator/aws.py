@@ -24,6 +24,10 @@ class AwsGateway(Protocol):
     def s3_delete(self, bucket: str, key: str) -> None: ...
     def s3_presign(self, bucket: str, key: str, expires: int = 3600) -> str: ...
     def now(self) -> float: ...
+    # Strategy memory (what worked before) and a small LLM call for the critic
+    def memory_stats(self, keys: list[str]) -> dict[str, dict[str, float]]: ...
+    def memory_record(self, key: str, success: bool, cost: float) -> None: ...
+    def llm_hint(self, prompt: str) -> str | None: ...
 
 
 def short_id(execution_arn_or_id: str) -> str:
@@ -41,6 +45,8 @@ class RealAws:
         self._sfn = boto3.client("stepfunctions", region_name=region, config=cfg)
         self._lambda = boto3.client("lambda", region_name=region, config=cfg)
         self._s3 = boto3.client("s3", region_name=region, config=Config(signature_version="s3v4"))
+        self._bedrock = boto3.client("bedrock-runtime", region_name=region, config=cfg)
+        self._region = region
 
     # --- Step Functions ---------------------------------------------------------------------------
     def sfn_start(self, state_machine_arn: str, payload: dict[str, Any], name: str | None = None) -> str:
@@ -114,6 +120,63 @@ class RealAws:
 
     def now(self) -> float:
         return time.time()
+
+    # --- strategy memory (DynamoDB, atomic counters; failures never break a repair) ---------------
+    def _memory_table(self):
+        import os
+
+        name = os.environ.get("AGENT_MEMORY_TABLE")
+        if not name:
+            return None
+        import boto3
+
+        return boto3.resource("dynamodb", region_name=self._region).Table(name)
+
+    def memory_stats(self, keys: list[str]) -> dict[str, dict[str, float]]:
+        table = self._memory_table()
+        out: dict[str, dict[str, float]] = {}
+        if table is None:
+            return out
+        for k in keys:
+            try:
+                item = table.get_item(Key={"key": k}).get("Item")
+            except Exception:  # noqa: BLE001
+                continue
+            if item:
+                out[k] = {"trials": float(item.get("trials", 0)), "successes": float(item.get("successes", 0)), "cost": float(item.get("cost", 0))}
+        return out
+
+    def memory_record(self, key: str, success: bool, cost: float) -> None:
+        table = self._memory_table()
+        if table is None:
+            return
+        from decimal import Decimal
+
+        try:
+            table.update_item(Key={"key": key}, UpdateExpression="ADD trials :one, successes :s, cost :c",
+                              ExpressionAttributeValues={":one": 1, ":s": 1 if success else 0, ":c": Decimal(str(round(cost, 6)))})
+        except Exception:  # noqa: BLE001
+            pass
+
+    def llm_hint(self, prompt: str) -> str | None:
+        """One cheap model call that turns validator findings into a targeted correction hint (the 'critic')."""
+        try:
+            import sys
+            from pathlib import Path
+
+            for p in (Path(__file__).resolve().parents[1] / "_shared", Path(__file__).resolve().parents[2] / "lambda" / "_shared"):
+                if p.exists() and str(p) not in sys.path:
+                    sys.path.insert(0, str(p))
+            from model_routing import resolve
+            from usage_meter import record
+
+            _alias, model_id = resolve("agent_planner")
+            r = self._bedrock.converse(modelId=model_id, messages=[{"role": "user", "content": [{"text": prompt}]}],
+                                       inferenceConfig={"maxTokens": 300, "temperature": 0})
+            record("critic", model_id, r["usage"]["inputTokens"], r["usage"]["outputTokens"], source="agent_critic")
+            return r["output"]["message"]["content"][0]["text"]
+        except Exception:  # noqa: BLE001
+            return None
 
 
 def iso(ts: float) -> str:

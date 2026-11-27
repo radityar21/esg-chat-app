@@ -21,21 +21,38 @@ EventBridge "Execution Status Change" ──► esg-agent-trigger ──► Runt
 - When a run ends, whether each section is fine, repairable, or a source-data problem.
 - How to explain a failure in plain language (`explain_run`).
 
-## Self-correction loop (`agentcore/orchestrator/healer.py`)
-The loop is deterministic Python. The LLM routes and explains; it does not decide whether to retry.
-Reasons: reproducible, bounded cost, unit-testable.
+## Self-correction loop (`agentcore/orchestrator/healer.py` + `strategies.py`)
+The loop is adaptive and the validator stays the only judge. The LLM routes requests, explains results and, as one
+optional strategy, writes a short correction hint ("critic"). It never decides whether a section passed.
 
-| Situation | Action |
-|---|---|
-| Section passes (`PASS`, `INCLUDED`) | Leave as is |
-| Failed rules are `generation` rules (wording, unsupported numbers, structure) | Regenerate with a correction block listing the failed rules and the allowed values, then re-validate. Up to `MAX_CORRECTION_ATTEMPTS` (2) |
-| Failed rules are source-data rules (VAL-NUM-02, VAL-NUM-06) | Do not regenerate. Escalate with an explanation of the data problem |
-| Section missing or validation did not run | Generate or re-validate |
-| Pipeline failed, cause looks transient | Restart once (`MAX_PIPELINE_RESTARTS`) |
-| Pipeline failed, any other cause | Escalate with a diagnosis (failed state, error, hint) |
+**1. Classify the failure** from the failed rules: `structural` (VAL-STR), `numeric` (VAL-NUM), `language` (VAL-PRH),
+or `generate` (section missing). Source-data rules (VAL-NUM-02, VAL-NUM-06) are never regenerated: they are escalated with an ETL note.
 
-Each step is an event in the ledger; the UI shows it as the "Orchestrator timeline". A lock object
-(`agent-ledger/<id>.lock`, created with `If-None-Match`) prevents two supervisors from working on one run.
+**2. Pick the next strategy** among the untried ones for that failure type:
+
+| Strategy | Model | What changes in the regeneration prompt |
+|---|---|---|
+| `fix_cheap` | Haiku | Corrective instructions for the failed rules |
+| `fix_strong` | Sonnet | Same instructions, stronger model |
+| `grounded_cheap` / `grounded_strong` | Haiku / Sonnet | Adds the list of numbers allowed (taken from the source metrics) |
+| `critic_strong` | Haiku writes a hint, Sonnet regenerates | Adds an AI-written, sanitised hint (links and markup removed) |
+| `minimal_safe` | Sonnet | Short text, figures only in tables. Always the last resort |
+
+Order = expected success per dollar. The expected success starts from a prior and is updated by **memory**: every attempt
+records success or failure per `failure type#strategy` in the DynamoDB table `esg-agent-memory` (atomic counters).
+A strategy that keeps failing for a failure type moves down; one that keeps working moves up. This is what makes the
+multi-model routing adaptive: cheap models are tried first only while they work.
+
+**3. Stop conditions** (whichever comes first): validation passes; only source-data problems remain; every applicable
+strategy was tried; the section budget (`SECTION_BUDGET_USD`, 0.40) or the run budget (`RUN_BUDGET_USD`, 1.50) would be exceeded;
+the hard ceiling `MAX_CORRECTION_ATTEMPTS` (4). A pipeline that failed for a transient reason is restarted once.
+
+**4. Review notes.** Instead of blocking, an unresolved section stays in the report with warnings, and the run result carries
+plain-language notes (`result.notes`: `info` repaired, `review` needs review before publishing, `action` fix the source data)
+and the repair spend. The UI shows them under "Review notes" in the agent timeline. There is no approval gate yet.
+
+Each step is an event in the ledger (`agent-ledger/<id>.json`). A lock object (`If-None-Match`) prevents two supervisors
+from working on one run. Not included: retrieving extra knowledge-base context as a strategy.
 
 ## Validator calibration (`VALIDATOR_CALIBRATION`, default `on`)
 `docs/VALIDATION_FALSE_POSITIVES.md` documents that the numeric rules flagged correct numbers (derived percentages,
@@ -44,6 +61,7 @@ column totals, nested values). Looping on those false positives would burn token
 Set `VALIDATOR_CALIBRATION=off` on `esg-validation` to restore the previous behaviour.
 
 ## Limits
+- Strategy memory lives in DynamoDB, not in AgentCore Memory. AgentCore Memory is a candidate for chat context later.
 - The Step Functions `RetryGeneration` path is unchanged (a blind retry). The agent does the informed correction afterwards.
 - The orchestrator calls Lambdas directly to regenerate a section, so a corrected report is assembled by `esg-assembly-doc` and stored next to the original.
 - The Docker image build, `cdk deploy` and live AWS calls were not run in the development sandbox. Logic is covered by unit tests with fakes (`tests/agentcore`, `tests/platform_api`).
