@@ -79,7 +79,7 @@ class EsgPlatformStack(Stack):
             standard_attributes=cognito.StandardAttributes(email=cognito.StandardAttribute(required=True, mutable=False)),
             password_policy=cognito.PasswordPolicy(min_length=12, require_lowercase=True, require_uppercase=True, require_digits=True, require_symbols=True),
             mfa=cognito.Mfa.OPTIONAL, mfa_second_factor=cognito.MfaSecondFactor(otp=True, sms=False),
-            account_recovery=cognito.AccountRecovery.EMAIL_ONLY, removal_policy=RemovalPolicy.RETAIN, deletion_protection=True)
+            account_recovery=cognito.AccountRecovery.EMAIL_ONLY, removal_policy=RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE, deletion_protection=False)
         for g, d in (("admin", "Can run scans, attest compliance items and see everything"), ("viewer", "Read-only access plus chat and scenarios")):
             cognito.CfnUserPoolGroup(self, f"Group{g.title()}", user_pool_id=pool.user_pool_id, group_name=g, description=d)
         pool_domain = pool.add_domain("Domain", cognito_domain=cognito.CognitoDomainOptions(domain_prefix=f"esg-intel-{acct}"))
@@ -107,7 +107,7 @@ class EsgPlatformStack(Stack):
                           removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")  # 14-day usage history by design
         # Learned success rates of correction strategies. Tiny, and valuable over time, so it is kept (no TTL).
         memory = ddb.Table(self, "AgentMemoryTable", partition_key=ddb.Attribute(name="key", type=ddb.AttributeType.STRING),
-                           billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.RETAIN, point_in_time_recovery=True)
+                           billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE, point_in_time_recovery=True)
         jobs = ddb.Table(self, "ChatJobsTable", table_name="esg-chat-jobs", partition_key=ddb.Attribute(name="job_id", type=ddb.AttributeType.STRING),
                          billing_mode=ddb.BillingMode.PAY_PER_REQUEST, removal_policy=RemovalPolicy.DESTROY, time_to_live_attribute="ttl")
 

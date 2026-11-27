@@ -21,12 +21,54 @@ PKG = BUILD / "agent_pkg"
 OUT = BUILD / "agent.zip"
 
 
+SCRIPT = """#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import re
+import sys
+from {module} import {func}
+if __name__ == "__main__":
+    sys.argv[0] = re.sub(r"(-script\\.pyw|\\.exe)?$", "", sys.argv[0])
+    sys.exit({func}())
+"""
+
+
+def write_console_scripts() -> None:
+    """Rewrite bin/ from the packages' entry points so the scripts run on Linux arm64.
+
+    pip writes host-specific launchers: .exe files on Windows, and on Linux a shebang that points at the build machine's
+    Python. AgentCore starts the entry point (opentelemetry-instrument) from bin/, so it must be a portable Python script.
+    """
+    import configparser
+
+    bindir = PKG / "bin"
+    shutil.rmtree(bindir, ignore_errors=True)
+    bindir.mkdir()
+    n = 0
+    for ep in PKG.glob("*.dist-info/entry_points.txt"):
+        cp = configparser.ConfigParser(delimiters=("=",), interpolation=None)
+        cp.optionxform = str
+        cp.read(ep, encoding="utf-8")
+        if not cp.has_section("console_scripts"):
+            continue
+        for name, target in cp.items("console_scripts"):
+            target = target.split("[")[0].strip()
+            module, _, func = target.partition(":")
+            if not func or "." in func:
+                continue
+            (bindir / name).write_text(SCRIPT.format(module=module.strip(), func=func.strip()), encoding="utf-8", newline="\n")
+            n += 1
+    if not (bindir / "opentelemetry-instrument").exists():
+        raise SystemExit("opentelemetry-instrument entry point not found: is aws-opentelemetry-distro in requirements.lock.txt?")
+    print(f"wrote {n} portable console scripts")
+
+
 def main() -> None:
     shutil.rmtree(PKG, ignore_errors=True)
     PKG.mkdir(parents=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--target", str(PKG), "--platform", "manylinux2014_aarch64",
                     "--implementation", "cp", "--python-version", PY, "--only-binary=:all:", "--upgrade", "--no-deps",
                     "-r", str(ROOT / "agentcore" / "requirements.lock.txt")], check=True)
+    write_console_scripts()
     shutil.copy2(ROOT / "agentcore" / "app.py", PKG / "app.py")
     shutil.copytree(ROOT / "agentcore" / "orchestrator", PKG / "orchestrator", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     (PKG / "_shared").mkdir()
@@ -45,10 +87,12 @@ def main() -> None:
             if p.is_dir():
                 info = zipfile.ZipInfo(rel + "/")
                 info.external_attr = (0o40755 << 16) | 0x10
+                info.create_system = 3
                 z.writestr(info, "")
                 continue
             info = zipfile.ZipInfo.from_file(p, rel)
             info.external_attr = ((0o100755 if rel.startswith('bin/') else 0o100644) << 16)
+            info.create_system = 3  # Unix, so the mode bits above are honoured
             info.compress_type = zipfile.ZIP_DEFLATED
             total += p.stat().st_size
             z.writestr(info, p.read_bytes())
