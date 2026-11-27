@@ -5,7 +5,6 @@
 
 Needs the workgroup esg-reporting-workgroup and the data buckets (EsgFoundationStack).
 """
-import re
 import time
 from pathlib import Path
 
@@ -16,8 +15,38 @@ FILES = ["01_create_databases.sql", "02_raw_tables.sql", "03_curated_tables.sql"
 
 
 def statements(text: str) -> list[str]:
-    text = re.sub(r"--[^\n]*", "", text)  # comments
-    return [s.strip() for s in text.split(";") if s.strip()]
+    """Split on ';' and drop '--' comments, but only OUTSIDE single-quoted strings (comments in the DDL contain ';')."""
+    text = text.lstrip("\ufeff")
+    out, buf, i, quoted = [], [], 0, False
+    while i < len(text):
+        ch = text[i]
+        if quoted:
+            buf.append(ch)
+            if ch == "'":
+                if text[i + 1:i + 2] == "'":  # escaped quote ''
+                    buf.append("'")
+                    i += 1
+                else:
+                    quoted = False
+        elif ch == "'":
+            quoted = True
+            buf.append(ch)
+        elif text.startswith("--", i):
+            while i < len(text) and text[i] != "\n":
+                i += 1
+            continue
+        elif ch == ";":
+            stmt = "".join(buf).strip()
+            if stmt:
+                out.append(stmt)
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        out.append(tail)
+    return out
 
 
 def main() -> None:
