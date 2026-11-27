@@ -25,8 +25,8 @@ def main() -> None:
     shutil.rmtree(PKG, ignore_errors=True)
     PKG.mkdir(parents=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--target", str(PKG), "--platform", "manylinux2014_aarch64",
-                    "--implementation", "cp", "--python-version", PY, "--only-binary=:all:", "--upgrade",
-                    "-r", str(ROOT / "agentcore" / "requirements.txt")], check=True)
+                    "--implementation", "cp", "--python-version", PY, "--only-binary=:all:", "--upgrade", "--no-deps",
+                    "-r", str(ROOT / "agentcore" / "requirements.lock.txt")], check=True)
     shutil.copy2(ROOT / "agentcore" / "app.py", PKG / "app.py")
     shutil.copytree(ROOT / "agentcore" / "orchestrator", PKG / "orchestrator", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     (PKG / "_shared").mkdir()
