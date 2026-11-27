@@ -5,7 +5,7 @@
     --RUN_ID           Step Functions execution name (groups the reports of one sync)
 
 Order of work (nothing is written to the raw zone unless the contract has no blocking violation):
-    1. read  esg.<table> WHERE reporting_year = <year> through the Glue connection (read-only database user)
+    1. read  esg.<table> through the Glue connection (read-only database user) and keep reporting_year = <year>
     2. gather statistics, evaluate the data contract, write the report to s3://<report bucket>/etl-reports/
     3. blocking violation -> fail with "DATA_CONTRACT_FAILED: ..." (the AgentCore orchestrator triages the failure)
     4. otherwise write Parquet to s3://<raw bucket>/raw/<table>/reporting_year=<year>/ (same layout as the Athena tables)
@@ -32,11 +32,15 @@ spec = C.CONTRACTS[table]
 sc = SparkContext.getOrCreate()
 glue = GlueContext(sc)
 
+# Glue treats "dbtable" as a table name (a subquery is quoted as an identifier), so read schema.table and filter in Spark.
+# The source tables are small (thousands of rows), so reading the whole table is cheap.
 dyf = glue.create_dynamic_frame.from_options(
     connection_type="postgresql",
-    connection_options={"useConnectionProperties": "true", "connectionName": args["CONNECTION_NAME"],
-                        "dbtable": f"(SELECT * FROM {args['SCHEMA']}.{table} WHERE reporting_year = {year}) AS src"})
-df = dyf.toDF().drop("reporting_year").cache()
+    connection_options={"useConnectionProperties": "true", "connectionName": args["CONNECTION_NAME"], "dbtable": f"{args['SCHEMA']}.{table}"})
+src = dyf.toDF()
+if "reporting_year" not in src.columns:
+    raise RuntimeError(f"DATA_CONTRACT_FAILED: {table} {year}: Column 'reporting_year' is not present in the source table.")
+df = src.filter(F.col("reporting_year") == year).drop("reporting_year").cache()
 
 # ── statistics ─────────────────────────────────────────────────────────────────────────────────
 rows = df.count()
