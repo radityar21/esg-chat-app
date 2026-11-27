@@ -27,7 +27,7 @@ Re-run `build_all.py` after changing any Lambda or agent code, then `cdk deploy`
 ## 2. Foundation: buckets, catalog, ETL jobs, report Lambdas, state machine, Knowledge Base
 ```powershell
 cd infra; cdk deploy EsgFoundationStack --app "python app.py"; cd ..
-python scripts\apply_ddl.py            # Glue databases + Athena tables (14 statements)
+python scripts\apply_ddl.py            # Glue databases + Athena tables (13 statements)
 $f = aws cloudformation describe-stacks --stack-name EsgFoundationStack --query "Stacks[0].Outputs" | ConvertFrom-Json
 $KB = ($f | ? OutputKey -eq KnowledgeBaseId).OutputValue; $DS = ($f | ? OutputKey -eq KnowledgeBaseDataSourceId).OutputValue
 python scripts\upload_kb_documents.py --kb-id $KB --data-source-id $DS     # uploads ~75 MB and waits for ingestion (10-20 min)

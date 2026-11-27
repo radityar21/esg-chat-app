@@ -18,5 +18,5 @@ def test_escaped_quotes_and_bom():
 
 def test_repo_ddl_splits_into_complete_statements():
     stmts = [s for f in m.FILES for s in m.statements((ROOT / "sql" / "ddl" / f).read_text(encoding="utf-8"))]
-    assert len(stmts) == 14
+    assert len(stmts) == 13  # 3 databases + 10 tables
     assert all(s.upper().startswith("CREATE") and s.count("'") % 2 == 0 for s in stmts)
