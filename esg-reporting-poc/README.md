@@ -102,3 +102,11 @@ All resources tagged with:
 - `Project=ESG`
 - `Env=POC`
 - `Team=Sustainability`
+
+## ESG Intelligence platform (AgentCore orchestrator + platform API)
+
+- `agentcore/`: AgentCore Runtime container. The agent routes requests, starts Step Functions, and repairs sections that fail validation. See `docs/AGENTCORE_ORCHESTRATION.md`.
+- `lambda/platform_api/`: compliance readiness, regulatory change scan, GHG inventory, portfolio analytics, scenarios, PII masking, token FinOps.
+- `lambda/_shared/`: model routing, PII guard, usage metering, scenario engine, domain configuration.
+- `infra/stacks/platform_stack.py`: CDK stack for all of the above. Deployment steps: `docs/DEPLOY_PLATFORM.md`.
+- Tests: `python -m pytest tests/agentcore tests/platform_api -q`.
