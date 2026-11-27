@@ -24,7 +24,8 @@ for _p in (Path(__file__).resolve().parents[1] / "_shared", Path(__file__).resol
         sys.path.insert(0, str(_p))
 import report_catalog as catalog  # noqa: E402
 
-SYNC_TABLES = ("energy_consumption", "loan_portfolio", "hr_metrics", "scope3_operational_activity")
+SYNC_TABLES = ("energy_consumption", "loan_portfolio", "hr_metrics", "scope3_operational_activity",
+               "entity", "facility", "emission_factor", "activity_data", "esg_metric")  # group data: scripts/generate_group_data.py
 FRAMEWORKS = ("GRI_305", "IFRS_S2", "CSRD_ESRS_E1", "OJK_PSPK", "MULTI_FRAMEWORK")
 
 SECTION_TEMPLATES: dict[str, list[dict[str, str]]] = {  # default (all sections, English) per framework

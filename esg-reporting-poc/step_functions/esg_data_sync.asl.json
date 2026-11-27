@@ -5,7 +5,7 @@
     "SyncTables": {
       "Type": "Map",
       "ItemsPath": "$.tables",
-      "MaxConcurrency": 2,
+      "MaxConcurrency": 4,
       "ItemSelector": {
         "table.$": "$$.Map.Item.Value",
         "reporting_year.$": "$.reporting_year",

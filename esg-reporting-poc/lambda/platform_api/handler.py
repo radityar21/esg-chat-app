@@ -13,6 +13,9 @@ HTTP routes (API Gateway HTTP API, payload v2, Cognito JWT authorizer on every r
     GET  /reports/templates/{key}            POST /reports/templates/{key}/draft [admin]   POST /reports/templates/{key}/publish [admin]
     POST /compliance/alerts/status [admin]   GET  /agent/conversations          GET  /agent/conversations/{id}
     POST /agent/conversations/{id}/delete
+    GET  /data/overview?year=&approach=&ef_set=        GET  /data/ledger?year=&approach=control|equity&ef_set=&entity=
+    GET  /data/facilities?year=&entity=                GET  /data/facility?year=&facility_id=&ef_set=
+    GET  /data/metrics?year=   GET  /data/alerts?year=   GET  /data/factors?year=
 Roles come from the ``cognito:groups`` claim: ``admin`` and ``viewer``. A user in neither group is rejected.
 Direct invocations are protected by IAM only.
 """
@@ -24,7 +27,7 @@ import json
 import logging
 from typing import Any, Callable
 
-from platform_api import agent_api, common, compliance, conversations, ghg, governance, portfolio, progress, report_builder, reports
+from platform_api import agent_api, common, compliance, conversations, datahub, ghg, governance, portfolio, progress, report_builder, reports
 
 log = logging.getLogger()
 log.setLevel(logging.INFO)
@@ -56,6 +59,15 @@ ACTIONS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "template_propose": lambda p: report_builder.save_draft(str(p.get("template_key", "")), str(p.get("text", "")),
                                                             f"AI proposal: {str(p.get('reason', ''))[:400]}", "agent"),
     "alert_context": lambda p: compliance.alert_context(str(p.get("alert_id", "")), int(p.get("year") or 2024)),
+    "data_query": datahub.agent_query,
+    # ESG Data Hub and GHG accounting
+    "data_overview": datahub.overview,
+    "data_ledger": datahub.ledger,
+    "data_facilities": datahub.facilities,
+    "data_facility": datahub.facility_detail,
+    "data_metrics": datahub.metrics,
+    "data_alerts": datahub.alerts,
+    "data_factors": datahub.factors,
 }
 
 ROUTES: dict[tuple[str, str], str] = {
@@ -66,8 +78,11 @@ ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/agent/chat"): "agent_chat", ("GET", "/agent/runs"): "agent_runs",
     ("GET", "/reports/history"): "reports_history", ("GET", "/reference/documents"): "reference_documents",
     ("GET", "/reports/catalog"): "report_catalog", ("GET", "/reports/configs"): "report_configs", ("POST", "/reports/generate"): "report_generate",
+    ("GET", "/data/overview"): "data_overview", ("GET", "/data/ledger"): "data_ledger", ("GET", "/data/facilities"): "data_facilities",
+    ("GET", "/data/facility"): "data_facility", ("GET", "/data/metrics"): "data_metrics", ("GET", "/data/alerts"): "data_alerts",
+    ("GET", "/data/factors"): "data_factors",
 }
-AGENT_ONLY = {"report_config_get", "template_get", "template_propose", "alert_context"}  # agent-only actions are not routed
+AGENT_ONLY = {"report_config_get", "template_get", "template_propose", "alert_context", "data_query"}  # agent-only actions are not routed
 ADMIN_ONLY = {"compliance_attest", "regulatory_scan_start"}
 
 

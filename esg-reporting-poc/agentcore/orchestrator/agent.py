@@ -45,6 +45,13 @@ HOW YOU WORK
    keeping every {placeholder}; say clearly that an administrator must publish the draft in the Report Builder.
 10. REPORT OPTIONS. Reports can be generated in English (default) or Bahasa Indonesia, and with a subset of sections or a
    saved configuration (list_report_configs). Only switch language or drop sections when the user asks.
+11. GROUP DATA AND GHG ACCOUNTING. For questions about the group's data (subsidiaries, facilities, activity data,
+   emission factors, energy, water, waste, social, governance, sustainable finance, data gaps) call get_esg_data:
+   view "overview" (totals per entity), "ledger" (scope/category/entity breakdown, base year, factor-set comparison,
+   target trajectory), "facility" (one facility's records with factors: the audit trail of a number), "metrics"
+   (non-GHG metrics per entity, pillar environment|social|governance|finance) or "alerts" (data gaps and anomalies).
+   Explain WHY a number changed by pointing at the activity, facility and factor behind it. State the consolidation
+   approach (operational control by default) and the factor set. A missing metric is "not reported", never zero.
 
 RULES
 - Never invent numbers, execution IDs, links or results. Only report what tools return.
@@ -184,7 +191,8 @@ def build_agent(service: ToolService, model_id: str | None = None, session_manag
 
         Args:
             reporting_year: Reporting year to sync (2023 or 2024).
-            tables: Subset of energy_consumption, loan_portfolio, hr_metrics, scope3_operational_activity. Omit for all.
+            tables: Subset of energy_consumption, loan_portfolio, hr_metrics, scope3_operational_activity, entity, facility,
+                emission_factor, activity_data, esg_metric. Omit for all.
             run_etl: Start the Scope 1/2/3 ETL afterwards if every table loaded.
         """
         return json.dumps(service.start("data_sync", reporting_year, tables=tables, run_etl=run_etl), default=str)
@@ -228,6 +236,23 @@ def build_agent(service: ToolService, model_id: str | None = None, session_manag
         return json.dumps(service.platform("alert_context", alert_id=alert_id), default=str)
 
     @tool
+    def get_esg_data(view: str = "overview", reporting_year: int = 2024, approach: str = "control", ef_set: str = "ID_NATIONAL",
+                     entity: str = "all", facility_id: str = "", pillar: str = "") -> str:
+        """Read the group's ESG data and GHG accounting from the Data Hub.
+
+        Args:
+            view: overview | ledger | facility | metrics | alerts.
+            reporting_year: 2023 or 2024.
+            approach: control (operational control, default) or equity (equity share).
+            ef_set: ID_NATIONAL (national grid factor, the reported basis) or ID_REGIONAL (factor per electricity system).
+            entity: all, or an entity id such as ENT-BANK, ENT-SYR, ENT-MFN, ENT-SEK, ENT-ASR.
+            facility_id: Required for view "facility", for example FAC-0001 or MFN-F011.
+            pillar: For view "metrics": environment, social, governance or finance (empty for all).
+        """
+        return json.dumps(service.platform("data_query", view=view, year=reporting_year, approach=approach, ef_set=ef_set, entity=entity,
+                                           facility_id=facility_id, pillar=pillar), default=str)[:60000]
+
+    @tool
     def propose_template_change(template_key: str, new_text: str, reason: str) -> str:
         """Save a DRAFT of a report section template for an administrator to review and publish in the Report Builder.
         Nothing changes in generated reports until it is published. Keep every {placeholder} of the current template.
@@ -262,7 +287,7 @@ def build_agent(service: ToolService, model_id: str | None = None, session_manag
         tools=[plan_pipeline, list_capabilities, start_pipeline, get_run_status, explain_run, supervise_run, get_download_link,
                get_compliance_readiness, get_regulatory_alerts, get_ghg_inventory, run_climate_scenarios, get_ai_cost_summary,
                sync_data_from_database, inspect_source_database, get_etl_report,
-               analyze_regulatory_finding, propose_template_change, get_report_template, list_report_configs],
+               analyze_regulatory_finding, propose_template_change, get_report_template, list_report_configs, get_esg_data],
     )
     agent.esg_model_id = mid  # read by app.py to meter each turn
     return agent

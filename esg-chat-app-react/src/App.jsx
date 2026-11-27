@@ -11,6 +11,9 @@ import Chat from './pages/Chat'
 import Reports from './pages/Reports'
 import Reference from './pages/Reference'
 import ReportBuilder from './pages/ReportBuilder'
+import DataHub from './pages/DataHub'
+import GhgAccounting from './pages/GhgAccounting'
+import EsgMetrics from './pages/EsgMetrics'
 import AuthGate from './components/AuthGate'
 
 const ORDER = NAV.flatMap((g) => g.items.map((i) => i.id))
@@ -38,6 +41,9 @@ function AppContent() {
     portfolio: <Portfolio />,
     governance: <Governance />,
     ghg: <GhgInventory />,
+    datahub: <DataHub onNavigate={setPage} />,
+    accounting: <GhgAccounting onNavigate={setPage} />,
+    metrics: <EsgMetrics onNavigate={setPage} />,
     chat: <Chat seed={chatSeed} onSeedUsed={() => setChatSeed(null)} />,
     builder: <ReportBuilder />,
     reports: <Reports />,

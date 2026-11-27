@@ -1,4 +1,4 @@
-import { LayoutGrid, ShieldCheck, FileStack, Layers, Cpu, Flame, MessageSquare, FileText, BookOpen, Leaf, SlidersHorizontal } from 'lucide-react'
+import { LayoutGrid, ShieldCheck, FileStack, Layers, Cpu, Flame, MessageSquare, FileText, BookOpen, Leaf, SlidersHorizontal, Database, Calculator, BarChart3 } from 'lucide-react'
 import { BANK } from '../data/bank'
 import { platformEnabled } from '../lib/platform'
 import { authEnabled, currentUser, logout } from '../lib/auth'
@@ -12,6 +12,11 @@ export const NAV = [
     { id: 'portfolio', icon: Layers, label: 'Portfolio Analytics', badge: '3' },
     { id: 'governance', icon: Cpu, label: 'AI Governance & FinOps', badge: '4' },
     { id: 'ghg', icon: Flame, label: 'GHG Inventory' },
+  ] },
+  { group: 'Data & Accounting', items: [
+    { id: 'datahub', icon: Database, label: 'ESG Data Hub' },
+    { id: 'accounting', icon: Calculator, label: 'GHG Accounting' },
+    { id: 'metrics', icon: BarChart3, label: 'ESG Metrics' },
   ] },
   { group: 'Workspace', items: [
     { id: 'chat', icon: MessageSquare, label: 'AI Assistant' },

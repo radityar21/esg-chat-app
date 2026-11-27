@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Creates the Glue databases and Athena tables (sql/ddl/01..05). Safe to re-run (CREATE ... IF NOT EXISTS).
+"""Creates the Glue databases and Athena tables (sql/ddl/01..06). Safe to re-run (CREATE ... IF NOT EXISTS).
 
     python scripts/apply_ddl.py
 
@@ -11,7 +11,7 @@ from pathlib import Path
 import boto3
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ["01_create_databases.sql", "02_raw_tables.sql", "03_curated_tables.sql", "04_aggregated_tables.sql", "05_scope3_operational.sql"]
+FILES = ["01_create_databases.sql", "02_raw_tables.sql", "03_curated_tables.sql", "04_aggregated_tables.sql", "05_scope3_operational.sql", "06_group_data.sql"]
 
 
 def statements(text: str) -> list[str]:

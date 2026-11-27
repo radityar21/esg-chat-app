@@ -25,6 +25,9 @@ from _shared import rds_conn
 TABLES = {  # table -> columns in CSV order are read from the header
     "energy_consumption": "esg.energy_consumption", "loan_portfolio": "esg.loan_portfolio",
     "hr_metrics": "esg.hr_metrics", "scope3_operational_activity": "esg.scope3_operational_activity",
+    # group data (scripts/generate_group_data.py)
+    "entity": "esg.entity", "facility": "esg.facility", "emission_factor": "esg.emission_factor",
+    "activity_data": "esg.activity_data", "esg_metric": "esg.esg_metric",
 }
 SEED_BUCKET = os.environ.get("SEED_BUCKET", "")
 MASTER = os.environ.get("MASTER_SECRET_ARN", "")

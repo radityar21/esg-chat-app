@@ -70,6 +70,62 @@ CONTRACTS: dict[str, dict[str, Any]] = {
             "data_quality_score": {"type": "int", "min": 1, "max": 5},
         },
     },
+    # ── group data (scripts/generate_group_data.py) ──
+    "entity": {
+        "partitions": [], "min_rows": 1, "unique": ["entity_id"],
+        "columns": {
+            "entity_id": {"type": "string", "nullable": False}, "entity_name": {"type": "string", "nullable": False},
+            "entity_type": {"type": "string", "nullable": False, "enum": ["bank", "sharia_bank", "multifinance", "securities", "insurance"]},
+            "parent_entity_id": {"type": "string", "null_ok": True},
+            "ownership_pct": {"type": "double", "nullable": False, "min": 0, "max": 100},
+            "operational_control": {"type": "boolean", "nullable": False}, "country": {"type": "string"}, "consolidation_note": {"type": "string"},
+        },
+    },
+    "facility": {
+        "partitions": [], "min_rows": 1, "unique": ["facility_id"],
+        "columns": {
+            "facility_id": {"type": "string", "nullable": False}, "entity_id": {"type": "string", "nullable": False},
+            "facility_name": {"type": "string"},
+            "facility_type": {"type": "string", "nullable": False, "enum": ["headquarters", "regional_office", "data_centre", "branch", "warehouse"]},
+            "grid_region": {"type": "string", "nullable": False, "enum": ["java_bali", "sumatra", "kalimantan", "sulawesi", "nusa_tenggara", "papua_maluku"]},
+            "province": {"type": "string"}, "city": {"type": "string"},
+            "floor_area_m2": {"type": "double", "min": 1, "max": 100000}, "headcount": {"type": "int", "min": 0, "max": 10000},
+            "ownership_type": {"type": "string", "enum": ["owned", "leased"]}, "opened_year": {"type": "int", "min": 1900, "max": 2100},
+            "status": {"type": "string", "enum": ["active", "opened", "closed"]},
+        },
+    },
+    "emission_factor": {
+        "partitions": [], "min_rows": 1, "unique": ["ef_set", "activity_type", "region"],
+        "columns": {
+            "ef_set": {"type": "string", "nullable": False}, "activity_type": {"type": "string", "nullable": False},
+            "region": {"type": "string", "nullable": False}, "unit": {"type": "string", "nullable": False},
+            "scope": {"type": "int", "nullable": False, "min": 1, "max": 3}, "category": {"type": "string", "nullable": False},
+            "co2_kg": {"type": "double", "nullable": False, "min": 0}, "ch4_kg": {"type": "double", "nullable": False, "min": 0},
+            "n2o_kg": {"type": "double", "nullable": False, "min": 0}, "co2e_kg": {"type": "double", "nullable": False, "min": 0, "max": 30000},
+            "gwp_ch4": {"type": "double", "nullable": False, "min": 1, "max": 100}, "gwp_n2o": {"type": "double", "nullable": False, "min": 100, "max": 400},
+            "gwp_basis": {"type": "string"}, "source": {"type": "string"}, "notes": {"type": "string"},
+        },
+    },
+    "activity_data": {
+        "partitions": [], "min_rows": 1, "unique": ["activity_id"],
+        "columns": {
+            "activity_id": {"type": "string", "nullable": False}, "facility_id": {"type": "string", "nullable": False},
+            "entity_id": {"type": "string", "nullable": False}, "activity_type": {"type": "string", "nullable": False},
+            "quantity": {"type": "double", "nullable": False, "min": 0, "max": 500_000_000}, "unit": {"type": "string", "nullable": False},
+            "instrument_qty": {"type": "double", "null_ok": True, "min": 0}, "data_source": {"type": "string"},
+            "is_estimated": {"type": "boolean", "nullable": False}, "evidence_ref": {"type": "string", "null_ok": True},
+            "reporting_month": {"type": "int", "nullable": False, "min": 1, "max": 12},
+        },
+    },
+    "esg_metric": {
+        "partitions": [], "min_rows": 1, "unique": ["entity_id", "metric", "dimension"],
+        "columns": {
+            "entity_id": {"type": "string", "nullable": False}, "pillar": {"type": "string", "nullable": False, "enum": ["social", "governance", "finance"]},
+            "topic": {"type": "string", "nullable": False}, "metric": {"type": "string", "nullable": False},
+            "dimension": {"type": "string", "nullable": False}, "value": {"type": "double", "nullable": False},
+            "unit": {"type": "string"}, "data_source": {"type": "string"}, "standard_ref": {"type": "string"},
+        },
+    },
 }
 
 
