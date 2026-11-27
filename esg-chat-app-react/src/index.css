@@ -146,3 +146,37 @@
     box-shadow: 0 2px 12px rgba(251, 191, 36, 0.12);
   }
 }
+
+/* ═══════════════ Executive design system (v3) ═══════════════ */
+@layer components {
+  .panel {
+    background: linear-gradient(145deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 1.25rem;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+  }
+  .eyebrow {
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: rgba(255,255,255,0.45);
+  }
+  .text-gradient {
+    background: linear-gradient(90deg, #4f8cf7, #06d6a0);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .font-display { font-family: 'Sora', 'Inter', sans-serif; }
+  .scanline {
+    background: linear-gradient(90deg, transparent, rgba(6,214,160,0.5), transparent);
+    animation: scan 1.6s linear infinite;
+  }
+  .row-hover:hover { background: rgba(255,255,255,0.035); }
+}
+@keyframes scan { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes ticker { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.ticker-in { animation: ticker 0.35s ease-out; }
+input[type='range'] { height: 4px; }

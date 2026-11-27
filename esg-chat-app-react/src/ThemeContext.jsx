@@ -5,7 +5,7 @@ const ThemeContext = createContext()
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('esg-theme') || 'dark'
+      return 'dark' // v3 UI is dark-only
     }
     return 'dark'
   })

@@ -293,3 +293,37 @@ No Redux/Zustand — all state managed with React `useState`:
 
 **Maintained by:** Tokaicom Mitra Indonesia (Tokai Group)  
 **Last Updated:** June 15, 2026
+
+---
+
+## ESG Intelligence Platform (v3 UI)
+
+Executive-grade UI built for the JPS (Jakarta Partner Summit) demo. Fictional institution: **Bank Nusantara Sejahtera**. All figures are synthetic and computed client-side from `src/data/*`.
+
+| Page | Capability |
+|------|-----------|
+| Command Center | KPI strip, regulatory radar, entry to all capabilities |
+| Compliance Intelligence | PSPK 1 & 2 Gap Analyzer + Regulatory Change Detection |
+| Reports & Scenarios | Multi-framework diff view (PSPK / GRI / IFRS S2 / CSRD) + scenario engine + what-if simulator |
+| Portfolio Analytics | PCAF data quality + TKBI green finance + peer benchmark |
+| AI Governance & FinOps | PII masking (UU PDP) + smart model routing + live token FinOps |
+| GHG Inventory | Follows the GHG Protocol Scope 3 reporting template, Parts 1-6 |
+| AI Assistant / Report Runs / Reference | Existing pages wired to the live API (logic unchanged) |
+
+Presenter shortcut: press keys `1`-`9` to jump between pages.
+
+### Notes and limitations
+- Peer scores, regulatory alerts, token usage and the scenario model are **illustrative**. The scenario model is deliberately simple (ΔECL = exposure × carbon-cost share of EBITDA × pass-through).
+- Framework reference codes in `src/data/frameworks.js` are a working mapping. Verify them against the standards before external publication.
+- Model prices in `src/data/governance.js` (Sonnet 4.5 $3/$15, Haiku 4.5 $1/$5 per 1M tokens) are list prices at the time of writing. Verify before quoting.
+- Images are bundled in `public/img`, so the demo works offline.
+
+### Image credits
+Photos are from [Unsplash](https://unsplash.com), used under the [Unsplash License](https://unsplash.com/license) (free, non-Plus). Attribution is intentionally not shown in the UI.
+
+| File | Subject | Unsplash photo ID | Photographer |
+|------|---------|-------------------|--------------|
+| `public/img/city-night.jpg` | Jakarta SCBD skyline at night | `photo-1748616559550-29cd1d6700e3` | TODO: add name from the photo page |
+| `public/img/forest-aerial-2.jpg` | Misty forest, aerial | `photo-1542273917363-3b1817f69a2d` | TODO: add name from the photo page |
+
+The photographer name could not be retrieved automatically. Look the photo up on Unsplash (the "scbd" and "trees-nature" search pages list both) and fill in the table.
